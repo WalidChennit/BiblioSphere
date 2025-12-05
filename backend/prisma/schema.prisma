@@ -1,0 +1,146 @@
+// -----------------------------------------------------
+// GENERATOR & DATASOURCE
+// -----------------------------------------------------
+generator client {
+  provider = "prisma-client-js"
+  output   = "../node_modules/.prisma/client" // chemin par défaut recommandé
+}
+
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+// -----------------------------------------------------
+// ENUMS
+// -----------------------------------------------------
+enum Role {
+  etudiant
+  membre_public
+  personnel
+}
+
+// -----------------------------------------------------
+// UTILISATEURS
+// -----------------------------------------------------
+model User {
+  id              Int           @id @default(autoincrement())
+  email           String        @unique
+  prenom          String
+  nom             String
+  nin             String        @unique
+  matricule       String?       @unique
+  dateDeNaissance DateTime
+  telephone       String
+  role            Role
+  emprunts        Emprunt[]
+  reservations    Reservation[]
+  createdAt       DateTime      @default(now())
+}
+
+// -----------------------------------------------------
+// TABLES POUR LA RECHERCHE AVANCÉE
+// -----------------------------------------------------
+
+// Catégories (Informatique, Roman, Science...)
+model Category {
+  id    Int     @id @default(autoincrement())
+  name  String  @unique
+  livres Livre[]
+}
+
+// Éditeur (O’Reilly, Dunod...)
+model Editor {
+  id    Int     @id @default(autoincrement())
+  name  String  @unique
+  livres Livre[]
+}
+
+// Auteurs (plusieurs auteurs par livre)
+model Author {
+  id     Int          @id @default(autoincrement())
+  nom    String
+  prenom String
+  livres LivreAuteur[]
+}
+
+// Pivot Livre <-> Auteur
+model LivreAuteur {
+  livreId  Int
+  authorId Int
+
+  livre   Livre  @relation(fields: [livreId], references: [id])
+  author  Author @relation(fields: [authorId], references: [id])
+
+  @@id([livreId, authorId])
+}
+
+// -----------------------------------------------------
+// LIVRES & EXEMPLAIRES
+// -----------------------------------------------------
+model Livre {
+  id               Int            @id @default(autoincrement())
+  titre            String
+  description      String?
+  isbn             String         @unique
+  anneePublication Int?
+  langue           String?
+  imageUrl         String?
+
+  // relations avancées
+  categoryId Int
+  editorId   Int
+
+  category   Category     @relation(fields: [categoryId], references: [id])
+  editor     Editor       @relation(fields: [editorId], references: [id])
+  auteurs    LivreAuteur[]
+  exemplaires Exemplaire[]
+
+  createdAt  DateTime     @default(now())
+}
+
+model Exemplaire {
+  id           Int           @id @default(autoincrement())
+  code         String        @unique
+  etat         String        // disponible, emprunte, reserve, en_reparation
+
+  livreId      Int
+  livre        Livre         @relation(fields: [livreId], references: [id])
+
+  emprunts     Emprunt[]
+  reservations Reservation[]
+}
+
+// -----------------------------------------------------
+// EMPRUNTS
+// -----------------------------------------------------
+model Emprunt {
+  id             Int        @id @default(autoincrement())
+  userId         Int
+  exemplaireId   Int
+
+  user           User       @relation(fields: [userId], references: [id])
+  exemplaire     Exemplaire @relation(fields: [exemplaireId], references: [id])
+
+  dateEmprunt    DateTime   @default(now())
+  dateRetour     DateTime?
+  renouvellement Int        @default(0)
+  createdAt      DateTime   @default(now())
+}
+
+// -----------------------------------------------------
+// RÉSERVATIONS
+// -----------------------------------------------------
+model Reservation {
+  id              Int        @id @default(autoincrement())
+  userId          Int
+  exemplaireId    Int
+
+  user            User       @relation(fields: [userId], references: [id])
+  exemplaire      Exemplaire @relation(fields: [exemplaireId], references: [id])
+
+  dateReservation DateTime   @default(now())
+  statut          String      @default("en_attente")
+  createdAt       DateTime   @default(now())
+}
