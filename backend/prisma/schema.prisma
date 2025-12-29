@@ -16,9 +16,15 @@ datasource db {
 // ENUMS
 // -----------------------------------------------------
 enum Role {
+  admin
   etudiant
   membre_public
   personnel
+}
+
+enum UserStatus {
+  ACTIVE
+  INACTIVE
 }
 
 // -----------------------------------------------------
@@ -33,7 +39,9 @@ model User {
   matricule       String?       @unique
   dateDeNaissance DateTime
   telephone       String
+  passwordHash    String
   role            Role
+  status          UserStatus    @default(ACTIVE)
   emprunts        Emprunt[]
   reservations    Reservation[]
   createdAt       DateTime      @default(now())
@@ -92,25 +100,23 @@ model Livre {
   categoryId Int
   editorId   Int
 
-  category   Category     @relation(fields: [categoryId], references: [id])
-  editor     Editor       @relation(fields: [editorId], references: [id])
-  auteurs    LivreAuteur[]
-  exemplaires Exemplaire[]
+  category       Category       @relation(fields: [categoryId], references: [id])
+  editor         Editor         @relation(fields: [editorId], references: [id])
+  auteurs        LivreAuteur[]
 
-  createdAt  DateTime     @default(now())
+  // Gestion par compteurs
+  stockTotal     Int            @default(0)
+  stockDisponible Int           @default(0)
+  reservedCount  Int            @default(0)
+  borrowedCount  Int            @default(0)
+
+  emprunts       Emprunt[]
+  reservations   Reservation[]
+
+  createdAt      DateTime       @default(now())
 }
 
-model Exemplaire {
-  id           Int           @id @default(autoincrement())
-  code         String        @unique
-  etat         String        // disponible, emprunte, reserve, en_reparation
-
-  livreId      Int
-  livre        Livre         @relation(fields: [livreId], references: [id])
-
-  emprunts     Emprunt[]
-  reservations Reservation[]
-}
+// Exemplaires supprimés: gestion par compteurs sur Livre
 
 // -----------------------------------------------------
 // EMPRUNTS
@@ -118,13 +124,16 @@ model Exemplaire {
 model Emprunt {
   id             Int        @id @default(autoincrement())
   userId         Int
-  exemplaireId   Int
+  livreId        Int
 
   user           User       @relation(fields: [userId], references: [id])
-  exemplaire     Exemplaire @relation(fields: [exemplaireId], references: [id])
+  livre          Livre      @relation(fields: [livreId], references: [id])
 
   dateEmprunt    DateTime   @default(now())
+  // Due date (expected return date)
   dateRetour     DateTime?
+  // Actual return timestamp
+  returnedAt     DateTime?
   renouvellement Int        @default(0)
   createdAt      DateTime   @default(now())
 }
@@ -135,12 +144,15 @@ model Emprunt {
 model Reservation {
   id              Int        @id @default(autoincrement())
   userId          Int
-  exemplaireId    Int
+  livreId         Int
 
   user            User       @relation(fields: [userId], references: [id])
-  exemplaire      Exemplaire @relation(fields: [exemplaireId], references: [id])
+  livre           Livre      @relation(fields: [livreId], references: [id])
 
+  // Start date when reservation becomes active / eligible (selected by student)
   dateReservation DateTime   @default(now())
+  // Due date / expiration for pickup window (optional)
+  dateReservationDue DateTime?
   statut          String      @default("en_attente")
   createdAt       DateTime   @default(now())
 }

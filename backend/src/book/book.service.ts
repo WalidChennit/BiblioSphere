@@ -17,7 +17,8 @@ export class BookService {
       throw new BadRequestException('ISBN déjà existant');
     }
 
-    return this.prisma.livre.create({
+    const initialCount = dto.nombreExemplaires ?? 0;
+    const livre = await this.prisma.livre.create({
       data: {
         titre: dto.titre,
         description: dto.description,
@@ -27,6 +28,10 @@ export class BookService {
         imageUrl: dto.imageUrl,
         categoryId: dto.categoryId,
         editorId: dto.editorId,
+        stockTotal: initialCount,
+        stockDisponible: initialCount,
+        reservedCount: 0,
+        borrowedCount: 0,
 
         auteurs: {
           create: dto.authorIds.map((authorId) => ({
@@ -34,36 +39,46 @@ export class BookService {
           })),
         },
       },
-      include: {
-        category: true,
-        editor: true,
-        auteurs: { include: { author: true } },
-      },
+      include: { category: true, editor: true, auteurs: { include: { author: true } } },
     });
+
+    // Si des réservations en attente existent déjà pour ce livre,
+    // on les convertit en 'disponible' tant qu'il reste du stockDisponible
+    if (initialCount > 0) {
+      const pending = await this.prisma.reservation.findMany({
+        where: { livreId: livre.id, statut: 'en_attente' },
+        orderBy: { dateReservation: 'asc' },
+        select: { id: true },
+      });
+      const toFulfill = Math.min(initialCount, pending.length);
+      if (toFulfill > 0) {
+        const ids = pending.slice(0, toFulfill).map((r) => r.id);
+        await this.prisma.$transaction([
+          this.prisma.reservation.updateMany({ where: { id: { in: ids } }, data: { statut: 'disponible' } }),
+          this.prisma.livre.update({
+            where: { id: livre.id },
+            data: {
+              reservedCount: { increment: toFulfill },
+              stockDisponible: { decrement: toFulfill },
+            },
+          }),
+        ]);
+      }
+    }
+
+    return this.findOne(livre.id);
   }
 
   // ✅ GET ALL LIVRES (COMPLET)
   async findAll() {
-    return this.prisma.livre.findMany({
-      include: {
-        category: true,
-        editor: true,
-        auteurs: { include: { author: true } },
-        exemplaires: true,
-      },
-    });
+    return this.prisma.livre.findMany({ include: { category: true, editor: true, auteurs: { include: { author: true } } } });
   }
 
   // ✅ GET ONE LIVRE
   async findOne(id: number) {
     const livre = await this.prisma.livre.findUnique({
       where: { id },
-      include: {
-        category: true,
-        editor: true,
-        auteurs: { include: { author: true } },
-        exemplaires: true,
-      },
+      include: { category: true, editor: true, auteurs: { include: { author: true } } },
     });
 
     if (!livre) throw new NotFoundException('Livre introuvable');
@@ -93,17 +108,12 @@ export class BookService {
 
   // ✅ DELETE LIVRE (SI AUCUN EXEMPLAIRE)
   async remove(id: number) {
-    const livre = await this.prisma.livre.findUnique({
-      where: { id },
-      include: { exemplaires: true },
-    });
+    const livre = await this.prisma.livre.findUnique({ where: { id } });
 
     if (!livre) throw new NotFoundException('Livre introuvable');
 
-    if (livre.exemplaires.length > 0) {
-      throw new BadRequestException(
-        'Suppression impossible : des exemplaires existent encore',
-      );
+    if (livre.borrowedCount > 0 || livre.reservedCount > 0) {
+      throw new BadRequestException('Suppression impossible : des emprunts ou réservations en cours');
     }
 
     return this.prisma.livre.delete({ where: { id } });

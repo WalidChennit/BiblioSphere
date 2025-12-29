@@ -1,52 +1,53 @@
 "use client"
 
+import { useEffect, useMemo, useState } from "react"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
 import { Heart, CheckCircle, Clock, AlertCircle } from "lucide-react"
+import { apiFetch } from "@/lib/api"
 
 export default function ReservationsPage() {
-  const reservations = [
-    {
-      id: 1,
-      bookTitle: "The Hobbit",
-      isbn: "9780547928227",
-      reservedBy: "Alice Brown",
-      reservedDate: "2025-01-20",
-      status: "Ready for Pickup",
-      position: 1,
-      waitingTime: "0 days",
-    },
-    {
-      id: 2,
-      bookTitle: "Dune",
-      isbn: "9780143111597",
-      reservedBy: "Bob Wilson",
-      reservedDate: "2025-01-19",
-      status: "In Queue",
-      position: 2,
-      waitingTime: "~3 days",
-    },
-    {
-      id: 3,
-      bookTitle: "Foundation",
-      isbn: "9780553293357",
-      reservedBy: "Carol Davis",
-      reservedDate: "2025-01-18",
-      status: "In Queue",
-      position: 3,
-      waitingTime: "~7 days",
-    },
-    {
-      id: 4,
-      bookTitle: "Neuromancer",
-      isbn: "9780441569595",
-      reservedBy: "David Lee",
-      reservedDate: "2025-01-17",
-      status: "In Queue",
-      position: 4,
-      waitingTime: "~10 days",
-    },
-  ]
+  const [loading, setLoading] = useState(false)
+  const [error, setError] = useState<string>("")
+  const [reservations, setReservations] = useState<any[]>([])
+  const [usersById, setUsersById] = useState<Map<number, any>>(new Map())
+  const [actingId, setActingId] = useState<number | null>(null)
+
+  const load = async () => {
+    setLoading(true)
+    setError("")
+    try {
+      const [resUsers, resReservations] = await Promise.all([
+        apiFetch("/users", { cache: "no-store" }),
+        apiFetch("/reservations", { cache: "no-store" }),
+      ])
+
+      if (!resUsers.ok) throw new Error(await resUsers.text())
+      if (!resReservations.ok) throw new Error(await resReservations.text())
+
+      const users = (await resUsers.json()) as any[]
+      const map = new Map<number, any>()
+      for (const u of users) map.set(u.id, u)
+      setUsersById(map)
+
+      const data = (await resReservations.json()) as any[]
+      setReservations(Array.isArray(data) ? data : [])
+    } catch (e) {
+      setError(e instanceof Error ? e.message : "Failed to load")
+    } finally {
+      setLoading(false)
+    }
+  }
+
+  useEffect(() => {
+    void load()
+  }, [])
+
+  const stats = useMemo(() => {
+    const ready = reservations.filter((r) => r.statut === "disponible").length
+    const queued = reservations.filter((r) => r.statut === "en_attente").length
+    return { ready, queued, total: reservations.length }
+  }, [reservations])
 
   const getStatusIcon = (status: string) => {
     switch (status) {
@@ -70,6 +71,47 @@ export default function ReservationsPage() {
     }
   }
 
+  const toUiStatus = (statut: string) => {
+    if (statut === "disponible") return "Ready for Pickup"
+    if (statut === "en_attente") return "In Queue"
+    return statut
+  }
+
+  const computeQueuePosition = (livreId: number, dateReservation: string) => {
+    const list = reservations
+      .filter((r) => r.livreId === livreId && r.statut === "en_attente")
+      .slice()
+      .sort((a, b) => String(a.dateReservation).localeCompare(String(b.dateReservation)))
+    const idx = list.findIndex((r) => String(r.dateReservation) === String(dateReservation))
+    return idx === -1 ? null : idx + 1
+  }
+
+  const cancelReservation = async (id: number) => {
+    try {
+      setActingId(id)
+      const res = await apiFetch(`/reservations/${id}`, { method: "DELETE" })
+      if (!res.ok) throw new Error(await res.text())
+      await load()
+    } catch (e) {
+      setError(e instanceof Error ? e.message : "Cancel failed")
+    } finally {
+      setActingId(null)
+    }
+  }
+
+  const checkoutReservation = async (id: number) => {
+    try {
+      setActingId(id)
+      const res = await apiFetch(`/reservations/${id}/pickup`, { method: "PATCH" })
+      if (!res.ok) throw new Error(await res.text())
+      await load()
+    } catch (e) {
+      setError(e instanceof Error ? e.message : "Checkout failed")
+    } finally {
+      setActingId(null)
+    }
+  }
+
   return (
     <div className="p-6 space-y-6">
       <div>
@@ -88,7 +130,7 @@ export default function ReservationsPage() {
           </CardHeader>
           <CardContent>
             <div className="text-3xl font-bold text-green-600 dark:text-green-500">
-              {reservations.filter((r) => r.status === "Ready for Pickup").length}
+              {stats.ready}
             </div>
           </CardContent>
         </Card>
@@ -98,7 +140,7 @@ export default function ReservationsPage() {
           </CardHeader>
           <CardContent>
             <div className="text-3xl font-bold text-amber-600 dark:text-amber-500">
-              {reservations.filter((r) => r.status === "In Queue").length}
+              {stats.queued}
             </div>
           </CardContent>
         </Card>
@@ -107,14 +149,37 @@ export default function ReservationsPage() {
             <CardTitle className="text-sm font-medium">Total Reservations</CardTitle>
           </CardHeader>
           <CardContent>
-            <div className="text-3xl font-bold text-slate-900 dark:text-white">{reservations.length}</div>
+            <div className="text-3xl font-bold text-slate-900 dark:text-white">{stats.total}</div>
           </CardContent>
         </Card>
       </div>
 
+      {error ? (
+        <div className="p-3 bg-red-50 dark:bg-red-900/20 text-red-600 dark:text-red-400 rounded-md text-sm">
+          {error}
+        </div>
+      ) : null}
+
       {/* Reservations List */}
       <div className="space-y-4">
-        {reservations.map((reservation) => (
+        {loading ? (
+          <Card>
+            <CardContent className="pt-6 text-sm text-slate-600 dark:text-slate-400">Loading...</CardContent>
+          </Card>
+        ) : null}
+
+        {reservations.map((reservation) => {
+          const uiStatus = toUiStatus(reservation.statut)
+          const user = usersById.get(reservation.userId)
+          const reservedBy = user ? `${user.prenom} ${user.nom}` : `User #${reservation.userId}`
+          const reservedDate = reservation.dateReservation ? String(reservation.dateReservation).slice(0, 10) : "—"
+          const position =
+            reservation.statut === "disponible"
+              ? 0
+              : reservation.queuePosition ?? computeQueuePosition(reservation.livreId, reservation.dateReservation)
+          const isbn = reservation.livre?.isbn || "—"
+
+          return (
           <Card key={reservation.id}>
             <CardContent className="pt-6">
               <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
@@ -122,15 +187,17 @@ export default function ReservationsPage() {
                 <div className="space-y-3">
                   <div>
                     <p className="text-sm font-semibold text-slate-500 dark:text-slate-400">Book Title</p>
-                    <p className="text-lg font-bold text-slate-900 dark:text-white">{reservation.bookTitle}</p>
+                    <p className="text-lg font-bold text-slate-900 dark:text-white">
+                      {reservation.livre?.titre || "—"}
+                    </p>
                   </div>
                   <div>
                     <p className="text-sm font-semibold text-slate-500 dark:text-slate-400">ISBN</p>
-                    <p className="font-mono text-sm text-slate-700 dark:text-slate-300">{reservation.isbn}</p>
+                    <p className="font-mono text-sm text-slate-700 dark:text-slate-300">{isbn}</p>
                   </div>
                   <div>
                     <p className="text-sm font-semibold text-slate-500 dark:text-slate-400">Reserved Date</p>
-                    <p className="text-sm text-slate-700 dark:text-slate-300">{reservation.reservedDate}</p>
+                    <p className="text-sm text-slate-700 dark:text-slate-300">{reservedDate}</p>
                   </div>
                 </div>
 
@@ -138,20 +205,22 @@ export default function ReservationsPage() {
                 <div className="space-y-3">
                   <div>
                     <p className="text-sm font-semibold text-slate-500 dark:text-slate-400">Reserved by</p>
-                    <p className="text-lg font-bold text-slate-900 dark:text-white">{reservation.reservedBy}</p>
+                    <p className="text-lg font-bold text-slate-900 dark:text-white">{reservedBy}</p>
                   </div>
                   <div className="flex items-center gap-4">
                     <div>
                       <p className="text-sm font-semibold text-slate-500 dark:text-slate-400">Position in Queue</p>
-                      <p className="text-lg font-bold text-slate-900 dark:text-white">#{reservation.position}</p>
+                      <p className="text-lg font-bold text-slate-900 dark:text-white">
+                        {typeof position === "number" ? (position === 0 ? "Ready" : `#${position}`) : "—"}
+                      </p>
                     </div>
                     <div className="flex items-center gap-2">
                       <div className="flex flex-col items-center">
-                        {getStatusIcon(reservation.status)}
+                        {getStatusIcon(uiStatus)}
                         <span
-                          className={`px-3 py-1 mt-2 rounded-full text-sm font-semibold ${getStatusColor(reservation.status)}`}
+                          className={`px-3 py-1 mt-2 rounded-full text-sm font-semibold ${getStatusColor(uiStatus)}`}
                         >
-                          {reservation.status}
+                          {uiStatus}
                         </span>
                       </div>
                     </div>
@@ -161,24 +230,39 @@ export default function ReservationsPage() {
 
               {/* Status-specific Actions */}
               <div className="flex gap-3 mt-4 pt-4 border-t border-slate-200 dark:border-slate-800">
-                {reservation.status === "Ready for Pickup" && (
+                {uiStatus === "Ready for Pickup" && (
                   <>
-                    <Button size="sm" className="gap-2 bg-green-600 hover:bg-green-700">
+                    <Button
+                      size="sm"
+                      className="gap-2 bg-green-600 hover:bg-green-700"
+                      disabled={actingId === reservation.id}
+                      onClick={() => void checkoutReservation(reservation.id)}
+                    >
                       <CheckCircle className="w-4 h-4" />
                       Checkout Book
                     </Button>
-                    <Button variant="outline" size="sm">
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      disabled={actingId === reservation.id}
+                      onClick={() => void cancelReservation(reservation.id)}
+                    >
                       Cancel Reservation
                     </Button>
                   </>
                 )}
-                {reservation.status === "In Queue" && (
+                {uiStatus === "In Queue" && (
                   <>
                     <div className="flex items-center gap-2 text-sm text-slate-600 dark:text-slate-400">
                       <Clock className="w-4 h-4" />
-                      <span>Estimated wait: {reservation.waitingTime}</span>
+                      <span>In queue</span>
                     </div>
-                    <Button variant="outline" size="sm">
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      disabled={actingId === reservation.id}
+                      onClick={() => void cancelReservation(reservation.id)}
+                    >
                       Cancel Reservation
                     </Button>
                   </>
@@ -186,7 +270,7 @@ export default function ReservationsPage() {
               </div>
             </CardContent>
           </Card>
-        ))}
+        )})}
       </div>
     </div>
   )

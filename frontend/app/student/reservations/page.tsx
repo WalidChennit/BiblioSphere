@@ -1,177 +1,247 @@
 "use client"
 
+import { useEffect, useMemo, useState } from "react"
+import { apiCancelReservation, apiMe, apiMyReservations, apiPickupReservation } from "@/lib/student"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
-import { Calendar, Clock, X } from "lucide-react"
+import { AlertCircle, Clock, XCircle } from "lucide-react"
 
-// Mock reserved books data
-const reservedBooks = [
-  {
-    id: 1,
-    title: "Educated",
-    author: "Tara Westover",
-    reservationDate: "2025-01-20",
-    queuePosition: 1,
-    estimatedWait: "2 weeks",
-    status: "next-in-queue",
-  },
-  {
-    id: 2,
-    title: "Sapiens",
-    author: "Yuval Noah Harari",
-    reservationDate: "2025-02-01",
-    queuePosition: 3,
-    estimatedWait: "4-5 weeks",
-    status: "waiting",
-  },
-  {
-    id: 3,
-    title: "Dune",
-    author: "Frank Herbert",
-    reservationDate: "2025-02-05",
-    queuePosition: 2,
-    estimatedWait: "3 weeks",
-    status: "waiting",
-  },
-  {
-    id: 4,
-    title: "Project Hail Mary",
-    author: "Andy Weir",
-    reservationDate: "2025-01-10",
-    queuePosition: 1,
-    estimatedWait: "1 week",
-    status: "ready",
-  },
-]
+type Reservation = {
+  id: number
+  userId: number
+  livreId: number
+  dateReservation: string
+  dateReservationDue?: string | null
+  statut: "disponible" | "en_attente" | string
+  createdAt: string
+  livre?: {
+    id: number
+    titre: string
+    isbn: string
+    imageUrl?: string | null
+  } | null
+  queuePosition?: number | null
+}
 
-const readyBooks = reservedBooks.filter((b) => b.status === "ready")
-const waitingBooks = reservedBooks.filter((b) => b.status !== "ready")
+const API_BASE = process.env.NEXT_PUBLIC_API_BASE_URL || "http://127.0.0.1:3001"
 
 export default function ReservationsPage() {
+  const [meUserId, setMeUserId] = useState<number | null>(null)
+  const [items, setItems] = useState<Reservation[]>([])
+  const [loading, setLoading] = useState(false)
+  const [actingId, setActingId] = useState<number | null>(null)
+  const [error, setError] = useState<string | null>(null)
+  const [message, setMessage] = useState<string | null>(null)
+  const [didAutoPickup, setDidAutoPickup] = useState(false)
+
+  const refresh = async () => {
+    setLoading(true)
+    setError(null)
+    try {
+      const me = await apiMe()
+      const uid = me.user?.id ?? null
+      setMeUserId(uid)
+      if (!uid) {
+        setItems([])
+        return
+      }
+      const data = (await apiMyReservations(uid)) as Reservation[]
+
+      // Auto-pickup runs once per page load to avoid repeated pickup calls.
+      if (!didAutoPickup) {
+        const nowMs = Date.now()
+        const dueToPickup = data.filter((r) => {
+          const startMs = r.dateReservation ? new Date(r.dateReservation).getTime() : NaN
+          if (r.statut !== "disponible") return false
+          return Number.isFinite(startMs) && startMs <= nowMs
+        })
+
+        setDidAutoPickup(true)
+        if (dueToPickup.length) {
+          await Promise.allSettled(dueToPickup.map((r) => apiPickupReservation(r.id)))
+          const dataAfter = (await apiMyReservations(uid)) as Reservation[]
+          setItems(dataAfter)
+          return
+        }
+      }
+
+      setItems(data)
+    } catch (e) {
+      setError(e instanceof Error ? e.message : "Failed to load reservations")
+    } finally {
+      setLoading(false)
+    }
+  }
+
+  useEffect(() => {
+    void refresh()
+  }, [])
+
+  const available = useMemo(() => items.filter((r) => r.statut === "disponible"), [items])
+  const pending = useMemo(() => items.filter((r) => r.statut === "en_attente"), [items])
+
+  const visible = useMemo(() => {
+    const now = new Date().getTime()
+    return items.filter((r) => {
+      const startMs = r.dateReservation ? new Date(r.dateReservation).getTime() : NaN
+      // If start date has arrived AND it's available, it should move to borrowed via pickup.
+      if (r.statut === "disponible" && Number.isFinite(startMs) && startMs <= now) return false
+      return true
+    })
+  }, [items])
+
+  const onCancel = async (id: number) => {
+    setActingId(id)
+    setError(null)
+    try {
+      await apiCancelReservation(id)
+      setMessage("Reservation cancelled.")
+      await refresh()
+    } catch (e) {
+      setError(e instanceof Error ? e.message : "Cancel failed")
+    } finally {
+      setActingId(null)
+      setTimeout(() => setMessage(null), 2500)
+    }
+  }
+
   return (
     <div className="p-6 space-y-6">
       <div>
         <h1 className="text-3xl font-bold text-slate-900 dark:text-white mb-2">My Reservations</h1>
-        <p className="text-slate-600 dark:text-slate-400">Track reserved books and queue positions</p>
+        <p className="text-slate-600 dark:text-slate-400">Track and cancel your reservations</p>
       </div>
 
-      {/* Summary Cards */}
-      <div className="grid md:grid-cols-2 gap-4">
-        <Card className="border-0 shadow-sm border-l-4 border-l-amber-600">
+      {!meUserId && !loading && (
+        <div className="p-3 rounded-lg border border-amber-200 bg-amber-50 text-amber-800 dark:border-amber-900 dark:bg-amber-950/40 dark:text-amber-200 text-sm">
+          Please login to see your reservations.
+        </div>
+      )}
+
+      {error && (
+        <div className="p-3 rounded-lg border border-red-200 bg-red-50 text-red-700 dark:border-red-900 dark:bg-red-950/40 dark:text-red-300 text-sm">
+          {error}
+        </div>
+      )}
+
+      {message && (
+        <div className="p-3 rounded-lg border border-green-200 bg-green-50 text-green-800 dark:border-green-900 dark:bg-green-950/40 dark:text-green-200 text-sm">
+          {message}
+        </div>
+      )}
+
+      <div className="grid md:grid-cols-3 gap-4">
+        <Card className="border-0 shadow-sm">
           <CardHeader className="pb-3">
-            <CardTitle className="text-sm font-medium text-slate-600 dark:text-slate-400">Ready for Pickup</CardTitle>
+            <CardTitle className="text-sm font-medium text-slate-600 dark:text-slate-400">Available</CardTitle>
           </CardHeader>
           <CardContent>
-            <p className="text-3xl font-bold text-amber-600 dark:text-amber-500">{readyBooks.length}</p>
+            <p className="text-3xl font-bold text-slate-900 dark:text-white">{available.length}</p>
           </CardContent>
         </Card>
 
         <Card className="border-0 shadow-sm">
           <CardHeader className="pb-3">
-            <CardTitle className="text-sm font-medium text-slate-600 dark:text-slate-400">Total Reservations</CardTitle>
+            <CardTitle className="text-sm font-medium text-slate-600 dark:text-slate-400 flex items-center gap-2">
+              <Clock className="w-4 h-4 text-amber-600" />
+              Pending
+            </CardTitle>
           </CardHeader>
           <CardContent>
-            <p className="text-3xl font-bold text-slate-900 dark:text-white">{reservedBooks.length}</p>
+            <p className="text-3xl font-bold text-amber-700 dark:text-amber-400">{pending.length}</p>
+          </CardContent>
+        </Card>
+
+        <Card className="border-0 shadow-sm">
+          <CardHeader className="pb-3">
+            <CardTitle className="text-sm font-medium text-slate-600 dark:text-slate-400">Total</CardTitle>
+          </CardHeader>
+          <CardContent>
+            <p className="text-3xl font-bold text-slate-900 dark:text-white">{items.length}</p>
           </CardContent>
         </Card>
       </div>
 
-      {/* Ready for Pickup */}
-      {readyBooks.length > 0 && (
-        <Card className="border-0 shadow-sm border-l-4 border-l-green-600">
-          <CardHeader>
-            <CardTitle className="flex items-center gap-2">
-              <Calendar className="w-5 h-5 text-green-600 dark:text-green-500" />
-              Ready for Pickup
-            </CardTitle>
-            <CardDescription>These books are available and waiting for you</CardDescription>
-          </CardHeader>
-          <CardContent className="space-y-3">
-            {readyBooks.map((book) => (
-              <div
-                key={book.id}
-                className="p-4 rounded-lg border-2 border-green-200 dark:border-green-800 bg-green-50 dark:bg-green-900/20"
-              >
-                <div className="flex items-start justify-between">
-                  <div className="flex-1">
-                    <h3 className="font-semibold text-slate-900 dark:text-white">{book.title}</h3>
-                    <p className="text-sm text-slate-600 dark:text-slate-400">by {book.author}</p>
-                  </div>
-                  <Badge className="bg-green-100 text-green-700 dark:bg-green-900 dark:text-green-300">Ready Now</Badge>
-                </div>
+      <Card className="border-0 shadow-sm">
+        <CardHeader>
+          <CardTitle className="flex items-center gap-2">
+            <AlertCircle className="w-5 h-5 text-slate-600 dark:text-slate-400" />
+            Reservations
+          </CardTitle>
+          <CardDescription>Your reservations (available and pending)</CardDescription>
+        </CardHeader>
+        <CardContent className="space-y-3">
+          {visible.length === 0 && !loading ? (
+            <div className="text-sm text-slate-600 dark:text-slate-400">No reservations yet.</div>
+          ) : (
+            visible
+              .slice()
+              .sort((a, b) => new Date(b.dateReservation).getTime() - new Date(a.dateReservation).getTime())
+              .map((r) => (
+                <div
+                  key={r.id}
+                  className="p-4 rounded-lg border border-slate-200 dark:border-slate-800 hover:bg-slate-50 dark:hover:bg-slate-900 transition-colors"
+                >
+                  <div className="flex items-start justify-between gap-3">
+                    <div className="flex items-start gap-3">
+                      <div className="w-14 h-20 rounded-md overflow-hidden bg-slate-100 dark:bg-slate-900 shrink-0">
+                        {r.livre?.imageUrl ? (
+                          <img
+                            src={r.livre.imageUrl.startsWith("http") ? r.livre.imageUrl : `${API_BASE}${r.livre.imageUrl}`}
+                            alt={r.livre?.titre || "Book"}
+                            className="w-full h-full object-cover"
+                          />
+                        ) : null}
+                      </div>
+                      <div>
+                        <h3 className="font-semibold text-slate-900 dark:text-white">{r.livre?.titre || `Livre #${r.livreId}`}</h3>
+                        <p className="text-xs text-slate-600 dark:text-slate-400 font-mono">{r.livre?.isbn || ""}</p>
+                        <div className="mt-2 flex items-center gap-2">
+                          <Badge variant="secondary">{r.statut}</Badge>
+                          {r.statut === "disponible" ? (
+                            <Badge className="bg-green-100 text-green-800 dark:bg-green-900 dark:text-green-200">
+                              Ready (available)
+                            </Badge>
+                          ) : null}
+                          {typeof r.queuePosition === "number" && r.statut === "en_attente" ? (
+                            <Badge className="bg-amber-100 text-amber-800 dark:bg-amber-900 dark:text-amber-200">
+                              Queue position #{r.queuePosition}
+                            </Badge>
+                          ) : null}
+                        </div>
 
-                <div className="grid grid-cols-2 md:grid-cols-4 gap-2 mt-3 text-xs">
-                  <div>
-                    <span className="text-slate-500 dark:text-slate-500">Reserved</span>
-                    <p className="font-medium text-slate-900 dark:text-white">{book.reservationDate}</p>
-                  </div>
-                  <div>
-                    <span className="text-slate-500 dark:text-slate-500">Queue Position</span>
-                    <p className="font-medium text-slate-900 dark:text-white">#{book.queuePosition}</p>
-                  </div>
-                  <div></div>
-                  <div className="flex gap-2">
-                    <Button size="sm" className="bg-green-600 hover:bg-green-700">
-                      Pick Up
+                        <div className="mt-3 grid grid-cols-2 md:grid-cols-3 gap-2 text-xs">
+                          <div>
+                            <span className="text-slate-500 dark:text-slate-500">Reservation date</span>
+                            <p className="font-medium text-slate-900 dark:text-white">
+                              {r.dateReservation ? new Date(r.dateReservation).toLocaleDateString() : "—"}
+                            </p>
+                          </div>
+                          <div>
+                            <span className="text-slate-500 dark:text-slate-500">Due date</span>
+                            <p className="font-medium text-slate-900 dark:text-white">
+                              {r.dateReservationDue ? new Date(r.dateReservationDue).toLocaleDateString() : "—"}
+                            </p>
+                          </div>
+                          <div>
+                            <span className="text-slate-500 dark:text-slate-500">Reservation ID</span>
+                            <p className="font-medium text-slate-900 dark:text-white">#{r.id}</p>
+                          </div>
+                        </div>
+                      </div>
+                    </div>
+
+                    <Button size="sm" variant="outline" disabled={actingId === r.id} onClick={() => void onCancel(r.id)}>
+                      <XCircle className="w-4 h-4 mr-2" />
+                      Cancel
                     </Button>
-                    <Button size="sm" variant="outline">
-                      <X className="w-3 h-3" />
-                    </Button>
                   </div>
                 </div>
-              </div>
-            ))}
-          </CardContent>
-        </Card>
-      )}
-
-      {/* Waiting in Queue */}
-      {waitingBooks.length > 0 && (
-        <Card className="border-0 shadow-sm">
-          <CardHeader>
-            <CardTitle className="flex items-center gap-2">
-              <Clock className="w-5 h-5" />
-              Waiting in Queue
-            </CardTitle>
-            <CardDescription>Your position in the reservation queue</CardDescription>
-          </CardHeader>
-          <CardContent className="space-y-3">
-            {waitingBooks.map((book) => (
-              <div
-                key={book.id}
-                className="p-4 rounded-lg border border-slate-200 dark:border-slate-800 hover:bg-slate-50 dark:hover:bg-slate-900 transition-colors"
-              >
-                <div className="flex items-start justify-between">
-                  <div className="flex-1">
-                    <h3 className="font-semibold text-slate-900 dark:text-white">{book.title}</h3>
-                    <p className="text-sm text-slate-600 dark:text-slate-400">by {book.author}</p>
-                  </div>
-                  <Badge variant="secondary">#{book.queuePosition} in queue</Badge>
-                </div>
-
-                <div className="grid grid-cols-2 md:grid-cols-4 gap-2 mt-3 text-xs">
-                  <div>
-                    <span className="text-slate-500 dark:text-slate-500">Reserved</span>
-                    <p className="font-medium text-slate-900 dark:text-white">{book.reservationDate}</p>
-                  </div>
-                  <div>
-                    <span className="text-slate-500 dark:text-slate-500">Est. Wait</span>
-                    <p className="font-medium text-slate-900 dark:text-white">{book.estimatedWait}</p>
-                  </div>
-                  <div>
-                    <span className="text-slate-500 dark:text-slate-500">Position</span>
-                    <p className="font-medium text-slate-900 dark:text-white">#{book.queuePosition}</p>
-                  </div>
-                  <Button size="sm" variant="outline" onClick={() => alert("Reservation cancelled")}>
-                    Cancel
-                  </Button>
-                </div>
-              </div>
-            ))}
-          </CardContent>
-        </Card>
-      )}
+              ))
+          )}
+        </CardContent>
+      </Card>
     </div>
   )
 }

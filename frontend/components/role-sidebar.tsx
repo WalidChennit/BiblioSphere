@@ -11,6 +11,9 @@ import {
   BookMarked,
   Heart,
   BookPlus,
+  Users,
+  Library,
+  UserSquare2,
   AlertCircle,
   Settings,
   LogOut,
@@ -51,7 +54,12 @@ export function RoleSidebar({ role, children }: RoleSidebarProps) {
           { icon: Heart, label: "Reservations", href: "/personal/reservations" },
         ]
       case "admin":
-        return [{ icon: Home, label: "Dashboard", href: "/dashboard" }]
+        return [
+          { icon: Home, label: "Dashboard", href: "/admin/dashboard" },
+          { icon: Users, label: "Users", href: "/admin/users" },
+          { icon: Library, label: "Catalogue", href: "/admin/catalogue" },
+          { icon: UserSquare2, label: "Authors & Editors", href: "/admin/people" },
+        ]
       default:
         return []
     }

@@ -35,7 +35,7 @@ export class BookController {
   }
 
   @Delete(':id')
-  @ApiOperation({ summary: 'Supprimer un livre sans exemplaires' })
+  @ApiOperation({ summary: 'Supprimer un livre (aucun emprunt/réservation en cours)' })
   remove(@Param('id') id: string) {
     return this.bookService.remove(Number(id));
   }

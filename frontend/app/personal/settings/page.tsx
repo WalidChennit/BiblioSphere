@@ -2,22 +2,29 @@
 
 import type React from "react"
 
-import { useState } from "react"
+import { useEffect, useMemo, useState } from "react"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
-import { Settings, Bell, Lock, X } from "lucide-react"
+import { Settings, Bell, Lock, X, Eye, EyeOff } from "lucide-react"
+import { apiChangeMyPassword, apiMe, apiUpdateMe } from "@/lib/student"
 
 export default function PersonalSettingsPage() {
   const [profile, setProfile] = useState({
-    firstName: "John",
-    lastName: "Librarian",
-    email: "john@library.com",
-    phone: "+1-234-567-8900",
-    nin: "NIN123456",
-    dateOfBirth: "1990-01-15",
+    firstName: "",
+    lastName: "",
+    email: "",
+    phone: "",
+    nin: "",
+    dateOfBirth: "",
   })
+
+  const [sessionUser, setSessionUser] = useState<{ id: number; email: string; role: string } | null>(null)
+  const [loadingProfile, setLoadingProfile] = useState(true)
+  const [savingProfile, setSavingProfile] = useState(false)
+  const [profileError, setProfileError] = useState<string>("")
+  const [profileSuccess, setProfileSuccess] = useState(false)
 
   const [notifications, setNotifications] = useState({
     emailAlerts: true,
@@ -34,6 +41,57 @@ export default function PersonalSettingsPage() {
   })
   const [passwordError, setPasswordError] = useState("")
   const [passwordSuccess, setPasswordSuccess] = useState(false)
+  const [savingPassword, setSavingPassword] = useState(false)
+  const [showPasswords, setShowPasswords] = useState({ current: false, next: false, confirm: false })
+
+  const isStudent = useMemo(() => sessionUser?.role === "etudiant", [sessionUser?.role])
+
+  useEffect(() => {
+    let cancelled = false
+    async function load() {
+      try {
+        setLoadingProfile(true)
+        setProfileError("")
+
+        const me = await apiMe()
+        if (cancelled) return
+        if (!me.user) {
+          setSessionUser(null)
+          setProfileError("You are not logged in")
+          return
+        }
+        setSessionUser(me.user)
+
+        const res = await fetch(`${process.env.NEXT_PUBLIC_API_BASE_URL || "http://localhost:3001"}/users`, {
+          credentials: "include",
+          cache: "no-store",
+        })
+        if (!res.ok) throw new Error(await res.text())
+        const users = (await res.json()) as Array<any>
+        const full = users.find((u) => u.id === me.user!.id)
+        if (!full) throw new Error("User not found")
+
+        setProfile({
+          firstName: full.prenom || "",
+          lastName: full.nom || "",
+          email: full.email || "",
+          phone: full.telephone || "",
+          nin: full.nin || "",
+          dateOfBirth: full.dateDeNaissance ? String(full.dateDeNaissance).slice(0, 10) : "",
+        })
+      } catch (e) {
+        if (cancelled) return
+        setProfileError(e instanceof Error ? e.message : "Failed to load profile")
+      } finally {
+        if (cancelled) return
+        setLoadingProfile(false)
+      }
+    }
+    void load()
+    return () => {
+      cancelled = true
+    }
+  }, [])
 
   const handleProfileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     setProfile({
@@ -57,7 +115,41 @@ export default function PersonalSettingsPage() {
     setPasswordError("")
   }
 
-  const handleUpdatePassword = () => {
+  const handleSaveProfile = async () => {
+    setProfileError("")
+    setProfileSuccess(false)
+
+    if (!sessionUser) {
+      setProfileError("You are not logged in")
+      return
+    }
+
+    try {
+      setSavingProfile(true)
+      const updated = await apiUpdateMe({
+        email: profile.email,
+        telephone: profile.phone,
+        ...(isStudent ? { matricule: undefined } : {}),
+      })
+
+      setProfile({
+        firstName: updated.user.prenom || "",
+        lastName: updated.user.nom || "",
+        email: updated.user.email || "",
+        phone: updated.user.telephone || "",
+        nin: updated.user.nin || "",
+        dateOfBirth: updated.user.dateDeNaissance ? String(updated.user.dateDeNaissance).slice(0, 10) : "",
+      })
+      setProfileSuccess(true)
+      setTimeout(() => setProfileSuccess(false), 2000)
+    } catch (e) {
+      setProfileError(e instanceof Error ? e.message : "Failed to save")
+    } finally {
+      setSavingProfile(false)
+    }
+  }
+
+  const handleUpdatePassword = async () => {
     setPasswordError("")
     setPasswordSuccess(false)
 
@@ -82,19 +174,24 @@ export default function PersonalSettingsPage() {
       return
     }
 
-    // Mock password update - replace with actual API call
-    console.log("Password update:", passwordData)
-    setPasswordSuccess(true)
-    setPasswordData({
-      currentPassword: "",
-      newPassword: "",
-      confirmPassword: "",
-    })
+    try {
+      setSavingPassword(true)
+      await apiChangeMyPassword({
+        currentPassword: passwordData.currentPassword,
+        newPassword: passwordData.newPassword,
+      })
+      setPasswordSuccess(true)
+      setPasswordData({ currentPassword: "", newPassword: "", confirmPassword: "" })
 
-    setTimeout(() => {
-      setShowPasswordModal(false)
-      setPasswordSuccess(false)
-    }, 2000)
+      setTimeout(() => {
+        setShowPasswordModal(false)
+        setPasswordSuccess(false)
+      }, 2000)
+    } catch (e) {
+      setPasswordError(e instanceof Error ? e.message : "Failed to update password")
+    } finally {
+      setSavingPassword(false)
+    }
   }
 
   return (
@@ -114,6 +211,18 @@ export default function PersonalSettingsPage() {
           <CardDescription>Update your personal details</CardDescription>
         </CardHeader>
         <CardContent className="space-y-4">
+          {profileError && (
+            <div className="p-3 bg-red-50 dark:bg-red-900/20 text-red-600 dark:text-red-400 rounded-md text-sm">
+              {profileError}
+            </div>
+          )}
+
+          {profileSuccess && (
+            <div className="p-3 bg-green-50 dark:bg-green-900/20 text-green-600 dark:text-green-400 rounded-md text-sm">
+              Profile updated successfully!
+            </div>
+          )}
+
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
             <div>
               <Label htmlFor="firstName">First Name</Label>
@@ -122,7 +231,8 @@ export default function PersonalSettingsPage() {
                 name="firstName"
                 value={profile.firstName}
                 onChange={handleProfileChange}
-                className="mt-1"
+                readOnly
+                className="mt-1 bg-slate-100 dark:bg-slate-800 cursor-not-allowed"
               />
             </div>
             <div>
@@ -132,7 +242,8 @@ export default function PersonalSettingsPage() {
                 name="lastName"
                 value={profile.lastName}
                 onChange={handleProfileChange}
-                className="mt-1"
+                readOnly
+                className="mt-1 bg-slate-100 dark:bg-slate-800 cursor-not-allowed"
               />
             </div>
             <div>
@@ -148,7 +259,14 @@ export default function PersonalSettingsPage() {
             </div>
             <div>
               <Label htmlFor="nin">National ID (NIN)</Label>
-              <Input id="nin" name="nin" value={profile.nin} onChange={handleProfileChange} className="mt-1" />
+              <Input
+                id="nin"
+                name="nin"
+                value={profile.nin}
+                onChange={handleProfileChange}
+                readOnly
+                className="mt-1 bg-slate-100 dark:bg-slate-800 cursor-not-allowed"
+              />
             </div>
             <div>
               <Label htmlFor="email">Email</Label>
@@ -169,11 +287,18 @@ export default function PersonalSettingsPage() {
                 type="date"
                 value={profile.dateOfBirth}
                 onChange={handleProfileChange}
-                className="mt-1"
+                readOnly
+                className="mt-1 bg-slate-100 dark:bg-slate-800 cursor-not-allowed"
               />
             </div>
           </div>
-          <Button className="bg-amber-600 hover:bg-amber-700">Save Changes</Button>
+          <Button
+            onClick={handleSaveProfile}
+            disabled={loadingProfile || savingProfile || !sessionUser}
+            className="bg-amber-600 hover:bg-amber-700"
+          >
+            {savingProfile ? "Saving..." : loadingProfile ? "Loading..." : "Save Changes"}
+          </Button>
         </CardContent>
       </Card>
 
@@ -285,46 +410,80 @@ export default function PersonalSettingsPage() {
 
               <div className="space-y-2">
                 <Label htmlFor="currentPassword">Current Password</Label>
-                <Input
-                  id="currentPassword"
-                  name="currentPassword"
-                  type="password"
-                  placeholder="Enter your current password"
-                  value={passwordData.currentPassword}
-                  onChange={handlePasswordChange}
-                  className="bg-slate-50 dark:bg-slate-900"
-                />
+                <div className="relative">
+                  <Input
+                    id="currentPassword"
+                    name="currentPassword"
+                    type={showPasswords.current ? "text" : "password"}
+                    placeholder="Enter your current password"
+                    value={passwordData.currentPassword}
+                    onChange={handlePasswordChange}
+                    className="bg-slate-50 dark:bg-slate-900 pr-10"
+                  />
+                  <button
+                    type="button"
+                    onClick={() => setShowPasswords((s) => ({ ...s, current: !s.current }))}
+                    className="absolute right-2 top-1/2 -translate-y-1/2 text-slate-500 hover:text-slate-700 dark:hover:text-slate-300"
+                    aria-label={showPasswords.current ? "Hide current password" : "Show current password"}
+                  >
+                    {showPasswords.current ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
+                  </button>
+                </div>
               </div>
 
               <div className="space-y-2">
                 <Label htmlFor="newPassword">New Password</Label>
-                <Input
-                  id="newPassword"
-                  name="newPassword"
-                  type="password"
-                  placeholder="Enter your new password"
-                  value={passwordData.newPassword}
-                  onChange={handlePasswordChange}
-                  className="bg-slate-50 dark:bg-slate-900"
-                />
+                <div className="relative">
+                  <Input
+                    id="newPassword"
+                    name="newPassword"
+                    type={showPasswords.next ? "text" : "password"}
+                    placeholder="Enter your new password"
+                    value={passwordData.newPassword}
+                    onChange={handlePasswordChange}
+                    className="bg-slate-50 dark:bg-slate-900 pr-10"
+                  />
+                  <button
+                    type="button"
+                    onClick={() => setShowPasswords((s) => ({ ...s, next: !s.next }))}
+                    className="absolute right-2 top-1/2 -translate-y-1/2 text-slate-500 hover:text-slate-700 dark:hover:text-slate-300"
+                    aria-label={showPasswords.next ? "Hide new password" : "Show new password"}
+                  >
+                    {showPasswords.next ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
+                  </button>
+                </div>
               </div>
 
               <div className="space-y-2">
                 <Label htmlFor="confirmPassword">Confirm New Password</Label>
-                <Input
-                  id="confirmPassword"
-                  name="confirmPassword"
-                  type="password"
-                  placeholder="Confirm your new password"
-                  value={passwordData.confirmPassword}
-                  onChange={handlePasswordChange}
-                  className="bg-slate-50 dark:bg-slate-900"
-                />
+                <div className="relative">
+                  <Input
+                    id="confirmPassword"
+                    name="confirmPassword"
+                    type={showPasswords.confirm ? "text" : "password"}
+                    placeholder="Confirm your new password"
+                    value={passwordData.confirmPassword}
+                    onChange={handlePasswordChange}
+                    className="bg-slate-50 dark:bg-slate-900 pr-10"
+                  />
+                  <button
+                    type="button"
+                    onClick={() => setShowPasswords((s) => ({ ...s, confirm: !s.confirm }))}
+                    className="absolute right-2 top-1/2 -translate-y-1/2 text-slate-500 hover:text-slate-700 dark:hover:text-slate-300"
+                    aria-label={showPasswords.confirm ? "Hide confirm password" : "Show confirm password"}
+                  >
+                    {showPasswords.confirm ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
+                  </button>
+                </div>
               </div>
 
               <div className="flex gap-3 pt-4">
-                <Button onClick={handleUpdatePassword} className="flex-1 bg-amber-600 hover:bg-amber-700">
-                  Update Password
+                <Button
+                  onClick={handleUpdatePassword}
+                  disabled={savingPassword}
+                  className="flex-1 bg-amber-600 hover:bg-amber-700"
+                >
+                  {savingPassword ? "Updating..." : "Update Password"}
                 </Button>
                 <Button
                   onClick={() => {

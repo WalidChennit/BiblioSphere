@@ -1,56 +1,99 @@
 "use client"
 
+import { useEffect, useMemo, useState } from "react"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
 import { AlertTriangle, Mail, Phone } from "lucide-react"
+import { apiFetch } from "@/lib/api"
 
 export default function OverduesPage() {
-  const overdues = [
-    {
-      id: 1,
-      bookTitle: "The Great Gatsby",
-      bookStatus: "Overdue",
-      borrower: "John Doe",
-      borrowerEmail: "john@example.com",
-      borrowerPhone: "+1-234-567-8900",
-      dueDate: "2025-01-10",
-      daysOverdue: 14,
-      bookISBN: "9780743273565",
-    },
-    {
-      id: 2,
-      bookTitle: "To Kill a Mockingbird",
-      bookStatus: "Overdue",
-      borrower: "Jane Smith",
-      borrowerEmail: "jane@example.com",
-      borrowerPhone: "+1-234-567-8901",
-      dueDate: "2025-01-15",
-      daysOverdue: 9,
-      bookISBN: "9780061120084",
-    },
-    {
-      id: 3,
-      bookTitle: "1984",
-      bookStatus: "Overdue",
-      borrower: "Mike Johnson",
-      borrowerEmail: "mike@example.com",
-      borrowerPhone: "+1-234-567-8902",
-      dueDate: "2025-01-18",
-      daysOverdue: 6,
-      bookISBN: "9780451524935",
-    },
-    {
-      id: 4,
-      bookTitle: "Pride and Prejudice",
-      bookStatus: "Overdue",
-      borrower: "Alice Brown",
-      borrowerEmail: "alice@example.com",
-      borrowerPhone: "+1-234-567-8903",
-      dueDate: "2025-01-20",
-      daysOverdue: 4,
-      bookISBN: "9780141439518",
-    },
-  ]
+  const [loading, setLoading] = useState(false)
+  const [error, setError] = useState<string>("")
+  const [overdues, setOverdues] = useState<any[]>([])
+  const [usersById, setUsersById] = useState<Map<number, any>>(new Map())
+  const [actingId, setActingId] = useState<number | null>(null)
+
+  const load = async () => {
+    setLoading(true)
+    setError("")
+    try {
+      const [resUsers, resEmprunts] = await Promise.all([
+        apiFetch("/users", { cache: "no-store" }),
+        apiFetch("/emprunts", { cache: "no-store" }),
+      ])
+
+      if (!resUsers.ok) throw new Error(await resUsers.text())
+      if (!resEmprunts.ok) throw new Error(await resEmprunts.text())
+
+      const users = (await resUsers.json()) as any[]
+      const map = new Map<number, any>()
+      for (const u of users) map.set(u.id, u)
+      setUsersById(map)
+
+      const emprunts = (await resEmprunts.json()) as any[]
+      const now = Date.now()
+      const overdue = (Array.isArray(emprunts) ? emprunts : []).filter((e) => {
+        if (e?.returnedAt) return false
+        const due = e?.dateRetour ? new Date(e.dateRetour).getTime() : NaN
+        return Number.isFinite(due) && due < now
+      })
+      setOverdues(overdue)
+    } catch (e) {
+      setError(e instanceof Error ? e.message : "Failed to load")
+    } finally {
+      setLoading(false)
+    }
+  }
+
+  useEffect(() => {
+    void load()
+  }, [])
+
+  const overdueCount = overdues.length
+
+  const markReturned = async (empruntId: number) => {
+    try {
+      setActingId(empruntId)
+      const res = await apiFetch(`/emprunts/${empruntId}/return`, { method: "PATCH" })
+      if (!res.ok) throw new Error(await res.text())
+      await load()
+    } catch (e) {
+      setError(e instanceof Error ? e.message : "Failed to mark returned")
+    } finally {
+      setActingId(null)
+    }
+  }
+
+  const formatDate = (value: any) => {
+    if (!value) return "—"
+    try {
+      return new Date(value).toISOString().slice(0, 10)
+    } catch {
+      return String(value)
+    }
+  }
+
+  const daysOverdue = (due: any) => {
+    const ms = new Date().getTime() - new Date(due).getTime()
+    if (!Number.isFinite(ms)) return null
+    return Math.max(0, Math.floor(ms / (1000 * 60 * 60 * 24)))
+  }
+
+  const items = useMemo(() => {
+    return overdues.map((e) => {
+      const user = usersById.get(e.userId)
+      return {
+        id: e.id,
+        bookTitle: e.livre?.titre || "—",
+        bookISBN: e.livre?.isbn || "—",
+        borrower: user ? `${user.prenom} ${user.nom}` : `User #${e.userId}`,
+        borrowerEmail: user?.email || "—",
+        borrowerPhone: user?.telephone || "—",
+        dueDate: formatDate(e.dateRetour),
+        daysOverdue: e.dateRetour ? daysOverdue(e.dateRetour) : null,
+      }
+    })
+  }, [overdues, usersById])
 
   return (
     <div className="p-6 space-y-6">
@@ -66,13 +109,21 @@ export default function OverduesPage() {
       <Card className="border-red-200 dark:border-red-800 bg-red-50 dark:bg-red-900/20">
         <CardHeader>
           <CardTitle className="text-red-700 dark:text-red-400">Critical Alert</CardTitle>
-          <CardDescription>You have {overdues.length} overdue books requiring immediate action</CardDescription>
+          <CardDescription>
+            {loading ? "Loading..." : `You have ${overdueCount} overdue books requiring immediate action`}
+          </CardDescription>
         </CardHeader>
       </Card>
 
+      {error ? (
+        <div className="p-3 bg-red-50 dark:bg-red-900/20 text-red-600 dark:text-red-400 rounded-md text-sm">
+          {error}
+        </div>
+      ) : null}
+
       {/* Overdues List */}
       <div className="space-y-4">
-        {overdues.map((item) => (
+        {items.map((item) => (
           <Card key={item.id} className="border-l-4 border-l-red-500">
             <CardContent className="pt-6">
               <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
@@ -110,7 +161,7 @@ export default function OverduesPage() {
                   </div>
                   <div className="pt-2">
                     <span className="px-3 py-1 bg-red-100 dark:bg-red-900/30 text-red-800 dark:text-red-400 rounded-full text-sm font-semibold">
-                      {item.daysOverdue} days overdue
+                      {typeof item.daysOverdue === "number" ? `${item.daysOverdue} days overdue` : "Overdue"}
                     </span>
                   </div>
                 </div>
@@ -126,7 +177,12 @@ export default function OverduesPage() {
                   <Phone className="w-4 h-4" />
                   Call Borrower
                 </Button>
-                <Button variant="outline" size="sm">
+                <Button
+                  variant="outline"
+                  size="sm"
+                  disabled={actingId === item.id}
+                  onClick={() => void markReturned(item.id)}
+                >
                   Mark as Returned
                 </Button>
               </div>

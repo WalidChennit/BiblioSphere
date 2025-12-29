@@ -1,4 +1,4 @@
-import { IsString, IsOptional, IsInt, IsArray } from 'class-validator';
+import { IsString, IsOptional, IsInt, IsArray, Min } from 'class-validator';
 import { ApiProperty } from '@nestjs/swagger';
 
 export class CreateBookDto {
@@ -41,4 +41,10 @@ export class CreateBookDto {
   @ApiProperty({ example: [1, 2] })
   @IsArray()
   authorIds: number[];
+
+  @ApiProperty({ example: 3, required: false, description: 'Nombre d\'exemplaires à créer automatiquement' })
+  @IsOptional()
+  @IsInt()
+  @Min(0)
+  nombreExemplaires?: number;
 }

@@ -10,6 +10,7 @@ import { Label } from "@/components/ui/label"
 import Link from "next/link"
 import { BookOpen } from "lucide-react"
 import { useRouter } from "next/navigation"
+import { apiFetch } from "@/lib/api"
 
 export default function LoginPage() {
   const [email, setEmail] = useState("")
@@ -17,7 +18,15 @@ export default function LoginPage() {
   const [error, setError] = useState("")
   const router = useRouter()
 
-  const handleSubmit = (e: React.FormEvent) => {
+  const redirectByRole = (role: string) => {
+    if (role === "admin") return "/admin/dashboard"
+    if (role === "personnel") return "/personal"
+    if (role === "etudiant") return "/student"
+    if (role === "membre_public") return "/"
+    return "/"
+  }
+
+  const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
     setError("")
 
@@ -27,9 +36,25 @@ export default function LoginPage() {
       return
     }
 
-    // Mock login - replace with actual authentication
-    console.log("Login attempt:", { email, password })
-    router.push("/dashboard")
+    try {
+      const res = await apiFetch(`/auth/login`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ email, password }),
+      })
+
+      if (!res.ok) {
+        const txt = await res.text().catch(() => "")
+        setError(txt || "Invalid credentials")
+        return
+      }
+
+      const data = (await res.json()) as { user?: { role?: string } }
+      const role = data?.user?.role || ""
+      router.push(redirectByRole(role))
+    } catch {
+      setError("Failed to login. Check API server.")
+    }
   }
 
   return (

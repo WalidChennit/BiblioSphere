@@ -4,26 +4,16 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/com
 import { BookOpen, BookMarked, Clock, AlertCircle, TrendingUp } from "lucide-react"
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
+import { useEffect, useMemo, useState } from "react"
+import { apiMe, apiMyBorrowed, apiReturnEmprunt, apiStudentStats, apiMyReservations } from "@/lib/student"
 
-// Mock data for borrowed books timeline
-const borrowData = [
-  { date: "Jan 1", borrowed: 2, reserved: 1 },
-  { date: "Jan 8", borrowed: 3, reserved: 2 },
-  { date: "Jan 15", borrowed: 5, reserved: 3 },
-  { date: "Jan 22", borrowed: 4, reserved: 4 },
-  { date: "Jan 29", borrowed: 6, reserved: 3 },
-  { date: "Feb 5", borrowed: 7, reserved: 5 },
-  { date: "Feb 12", borrowed: 8, reserved: 4 },
-]
-
-// Mock data for book categories
-const categoryData = [
-  { name: "Science", value: 15 },
-  { name: "Fiction", value: 12 },
-  { name: "History", value: 8 },
-  { name: "Self-Help", value: 6 },
-  { name: "Others", value: 9 },
-]
+type DashboardBorrowedBook = {
+  id: number
+  livreId: number
+  dateRetour: string | null
+  isOverdue?: boolean
+  livre?: { titre: string; imageUrl?: string | null } | null
+}
 
 const COLORS = [
   "hsl(var(--chart-1))",
@@ -33,67 +23,105 @@ const COLORS = [
   "hsl(var(--chart-5))",
 ]
 
-// Mock borrowed books
-const borrowedBooks = [
-  {
-    id: 1,
-    title: "The Midnight Library",
-    author: "Matt Haig",
-    dueDate: "2025-02-15",
-    daysLeft: 3,
-    status: "active",
-  },
-  {
-    id: 2,
-    title: "Atomic Habits",
-    author: "James Clear",
-    dueDate: "2025-02-20",
-    daysLeft: 8,
-    status: "active",
-  },
-  {
-    id: 3,
-    title: "The Great Gatsby",
-    author: "F. Scott Fitzgerald",
-    dueDate: "2025-02-05",
-    daysLeft: -2,
-    status: "overdue",
-  },
-]
-
-// Mock overdue books data
-const overdueBooks = [
-  {
-    id: 3,
-    title: "The Great Gatsby",
-    author: "F. Scott Fitzgerald",
-    dueDate: "2025-02-05",
-    daysOverdue: 2,
-    isbn: "978-0743273565",
-  },
-  {
-    id: 4,
-    title: "Sapiens",
-    author: "Yuval Noah Harari",
-    dueDate: "2025-01-25",
-    daysOverdue: 17,
-    isbn: "978-0062316097",
-  },
-]
-
-// Mock monthly borrowing trends data
-const monthlyTrends = [
-  { month: "Jan", borrowed: 4, reserved: 2, returned: 3 },
-  { month: "Feb", borrowed: 6, reserved: 3, returned: 4 },
-  { month: "Mar", borrowed: 8, reserved: 4, returned: 6 },
-  { month: "Apr", borrowed: 5, reserved: 2, returned: 5 },
-  { month: "May", borrowed: 7, reserved: 5, returned: 6 },
-  { month: "Jun", borrowed: 9, reserved: 4, returned: 8 },
-]
+type DashboardStats = {
+  counts: {
+    borrowedTotal: number
+    reservedPending: number
+    reservedAvailable: number
+    activeBorrowed: number
+    overdue: number
+  }
+  monthlyTrends: Array<{ month: string; borrowed: number; reserved: number; returned: number }>
+  categoryData: Array<{ name: string; value: number }>
+}
 
 export default function StudentDashboard() {
+  const [loading, setLoading] = useState(false)
+  const [error, setError] = useState<string | null>(null)
+  const [meUserId, setMeUserId] = useState<number | null>(null)
+  const [stats, setStats] = useState<DashboardStats | null>(null)
+  const [activeBorrows, setActiveBorrows] = useState<DashboardBorrowedBook[]>([])
+
+  const refresh = async () => {
+    setLoading(true)
+    setError(null)
+    try {
+      const me = await apiMe()
+      const uid = me.user?.id ?? null
+      setMeUserId(uid)
+      if (!uid) {
+        setStats(null)
+        setActiveBorrows([])
+        return
+      }
+
+      const [s, emprunts] = await Promise.all([apiStudentStats(uid), apiMyBorrowed(uid)])
+      setStats(s)
+      setActiveBorrows((emprunts as any[]) as DashboardBorrowedBook[])
+    } catch (e) {
+      setError(e instanceof Error ? e.message : "Failed to load dashboard")
+    } finally {
+      setLoading(false)
+    }
+  }
+
+  useEffect(() => {
+    void refresh()
+  }, [])
+
+  const overdueBooks = useMemo(() => {
+    const nowMs = Date.now()
+    return activeBorrows.filter((e) => {
+      if (typeof e.isOverdue === "boolean") return e.isOverdue
+      if (!e.dateRetour) return false
+      const dueMs = new Date(e.dateRetour).getTime()
+      return Number.isFinite(dueMs) && dueMs < nowMs
+    })
+  }, [activeBorrows])
+
+  const borrowedBooks = useMemo(() => {
+    const nowMs = Date.now()
+    return activeBorrows.map((e) => {
+      const dueMs = e.dateRetour ? new Date(e.dateRetour).getTime() : NaN
+      const daysLeft = Number.isFinite(dueMs) ? Math.ceil((dueMs - nowMs) / (1000 * 60 * 60 * 24)) : 0
+      const isOverdue = typeof e.isOverdue === "boolean" ? e.isOverdue : Number.isFinite(dueMs) && dueMs < nowMs
+      return {
+        id: e.id,
+        title: e.livre?.titre ?? `Livre #${e.livreId}`,
+        dueDate: e.dateRetour ? new Date(e.dateRetour).toISOString().slice(0, 10) : "—",
+        daysLeft,
+        status: isOverdue ? "overdue" : "active",
+      }
+    })
+  }, [activeBorrows])
+
+  const monthlyTrends = stats?.monthlyTrends ?? []
+  const categoryData = stats?.categoryData ?? []
+
+  const onReturnNow = async (empruntId: number) => {
+    setError(null)
+    try {
+      await apiReturnEmprunt(empruntId)
+      await refresh()
+    } catch (e) {
+      setError(e instanceof Error ? e.message : "Return failed")
+    }
+  }
+
   return (
     <div className="p-6 space-y-6">
+      {error && (
+        <div className="p-3 rounded-lg border border-red-200 bg-red-50 text-red-700 dark:border-red-900 dark:bg-red-950/40 dark:text-red-300 text-sm">
+          {error}
+        </div>
+      )}
+
+      {!meUserId && !loading && (
+        <div className="p-3 rounded-lg border border-amber-200 bg-amber-50 text-amber-800 dark:border-amber-900 dark:bg-amber-950/40 dark:text-amber-200 text-sm">
+          Please login to see your dashboard.
+        </div>
+      )}
+
       {/* Stats Cards */}
       <div className="grid md:grid-cols-2 lg:grid-cols-4 gap-4">
         <Card className="border-0 shadow-sm">
@@ -104,8 +132,8 @@ export default function StudentDashboard() {
             </CardTitle>
           </CardHeader>
           <CardContent>
-            <p className="text-3xl font-bold text-slate-900 dark:text-white">18</p>
-            <p className="text-xs text-slate-500 dark:text-slate-500 mt-1">This semester</p>
+            <p className="text-3xl font-bold text-slate-900 dark:text-white">{stats?.counts.borrowedTotal ?? 0}</p>
+            <p className="text-xs text-slate-500 dark:text-slate-500 mt-1">Last 6 months</p>
           </CardContent>
         </Card>
 
@@ -117,7 +145,7 @@ export default function StudentDashboard() {
             </CardTitle>
           </CardHeader>
           <CardContent>
-            <p className="text-3xl font-bold text-slate-900 dark:text-white">5</p>
+            <p className="text-3xl font-bold text-slate-900 dark:text-white">{stats?.counts.reservedPending ?? 0}</p>
             <p className="text-xs text-slate-500 dark:text-slate-500 mt-1">Waiting in queue</p>
           </CardContent>
         </Card>
@@ -130,7 +158,7 @@ export default function StudentDashboard() {
             </CardTitle>
           </CardHeader>
           <CardContent>
-            <p className="text-3xl font-bold text-slate-900 dark:text-white">3</p>
+            <p className="text-3xl font-bold text-slate-900 dark:text-white">{stats?.counts.activeBorrowed ?? 0}</p>
             <p className="text-xs text-slate-500 dark:text-slate-500 mt-1">Currently reading</p>
           </CardContent>
         </Card>
@@ -143,7 +171,7 @@ export default function StudentDashboard() {
             </CardTitle>
           </CardHeader>
           <CardContent>
-            <p className="text-3xl font-bold text-red-600 dark:text-red-400">{overdueBooks.length}</p>
+            <p className="text-3xl font-bold text-red-600 dark:text-red-400">{stats?.counts.overdue ?? overdueBooks.length}</p>
             <p className="text-xs text-slate-500 dark:text-slate-500 mt-1">Return soon</p>
           </CardContent>
         </Card>
@@ -223,17 +251,15 @@ export default function StudentDashboard() {
               >
                 <div className="flex items-start justify-between">
                   <div className="flex-1">
-                    <h3 className="font-semibold text-slate-900 dark:text-white">{book.title}</h3>
-                    <p className="text-sm text-slate-600 dark:text-slate-400">by {book.author}</p>
-                    <p className="text-xs text-slate-500 dark:text-slate-400 mt-1">ISBN: {book.isbn}</p>
+                    <h3 className="font-semibold text-slate-900 dark:text-white">{book.livre?.titre ?? `Livre #${book.livreId}`}</h3>
                   </div>
                   <Badge className="bg-red-100 text-red-700 dark:bg-red-900 dark:text-red-300">
-                    {book.daysOverdue} days overdue
+                    Overdue
                   </Badge>
                 </div>
                 <div className="flex items-center justify-between mt-3">
-                  <span className="text-sm text-red-600 dark:text-red-400">Due: {book.dueDate}</span>
-                  <Button size="sm" className="bg-red-600 hover:bg-red-700">
+                  <span className="text-sm text-red-600 dark:text-red-400">Due: {book.dateRetour ? new Date(book.dateRetour).toISOString().slice(0, 10) : "—"}</span>
+                  <Button size="sm" className="bg-red-600 hover:bg-red-700" onClick={() => void onReturnNow(book.id)}>
                     Return Now
                   </Button>
                 </div>
@@ -259,7 +285,6 @@ export default function StudentDashboard() {
                 <div className="flex items-start justify-between">
                   <div className="flex-1">
                     <h3 className="font-semibold text-slate-900 dark:text-white">{book.title}</h3>
-                    <p className="text-sm text-slate-600 dark:text-slate-400">by {book.author}</p>
                   </div>
                   <span
                     className={`px-3 py-1 rounded-full text-xs font-medium whitespace-nowrap ml-4 ${

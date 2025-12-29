@@ -1,141 +1,302 @@
 "use client"
 
-import { useState } from "react"
-import { Search, Filter, X, Heart, BookMarked, Eye } from "lucide-react"
+import { useEffect, useMemo, useState } from "react"
+import { Search, Filter, X, Heart, BookMarked, Eye, RefreshCw } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import { Card, CardContent } from "@/components/ui/card"
 import { Badge } from "@/components/ui/badge"
+import { apiBorrow, apiCancelReservation, apiMe, apiMyBorrowed, apiMyReservations, apiReserve } from "@/lib/student"
 
-// Mock book data
-const mockBooks = [
-  {
-    id: 1,
-    title: "The Midnight Library",
-    author: "Matt Haig",
-    category: "Fiction",
-    language: "English",
-    isbn: "978-0385547925",
-    publisher: "Penguin",
-    year: 2020,
-    rating: 4.5,
-    cover:
-      "url('data:image/svg+xml,%3Csvg xmlns=%22http://www.w3.org/2000/svg%22 width=%22150%22 height=%22200%22%3E%3Crect fill=%22%23CA8A04%22 width=%22150%22 height=%22200%22/%3E%3Ctext x=%2250%25%22 y=%2250%25%22 dominantBaseline=%22middle%22 textAnchor=%22middle%22 fontFamily=%22serif%22 fontSize=%2216%22 fill=%22white%22%3EThe Midnight Library%3C/text%3E%3C/svg%3E')",
-    description:
-      "A dazzling novel from the author of Reasons to Stay Alive explores all the choices that go into a life well lived.",
-    available: true,
-  },
-  {
-    id: 2,
-    title: "Atomic Habits",
-    author: "James Clear",
-    category: "Self-Help",
-    language: "English",
-    isbn: "978-0735211292",
-    publisher: "Avery",
-    year: 2018,
-    rating: 4.7,
-    cover:
-      "url('data:image/svg+xml,%3Csvg xmlns=%22http://www.w3.org/2000/svg%22 width=%22150%22 height=%22200%22%3E%3Crect fill=%22%23EA580C%22 width=%22150%22 height=%22200%22/%3E%3Ctext x=%2250%25%22 y=%2250%25%22 dominantBaseline=%22middle%22 textAnchor=%22middle%22 fontFamily=%22serif%22 fontSize=%2216%22 fill=%22white%22%3EAtomic Habits%3C/text%3E%3C/svg%3E')",
-    description:
-      "Tiny Changes, Remarkable Results. No matter your goals, Atomic Habits offers a proven framework for improving.",
-    available: true,
-  },
-  {
-    id: 3,
-    title: "A Brief History of Time",
-    author: "Stephen Hawking",
-    category: "Science",
-    language: "English",
-    isbn: "978-0553380163",
-    publisher: "Bantam",
-    year: 1988,
-    rating: 4.3,
-    cover:
-      "url('data:image/svg+xml,%3Csvg xmlns=%22http://www.w3.org/2000/svg%22 width=%22150%22 height=%22200%22%3E%3Crect fill=%22%233B82F6%22 width=%22150%22 height=%22200%22/%3E%3Ctext x=%2250%25%22 y=%2250%25%22 dominantBaseline=%22middle%22 textAnchor=%22middle%22 fontFamily=%22serif%22 fontSize=%2216%22 fill=%22white%22%3EA Brief History of Time%3C/text%3E%3C/svg%3E')",
-    description: "Stephen Hawking explores the universe, from the Big Bang to Black Holes and everything in between.",
-    available: true,
-  },
-  {
-    id: 4,
-    title: "Sapiens",
-    author: "Yuval Noah Harari",
-    category: "History",
-    language: "English",
-    isbn: "978-0062316097",
-    publisher: "Harper",
-    year: 2011,
-    rating: 4.6,
-    cover:
-      "url('data:image/svg+xml,%3Csvg xmlns=%22http://www.w3.org/2000/svg%22 width=%22150%22 height=%22200%22%3E%3Crect fill=%22%238B5A2B%22 width=%22150%22 height=%22200%22/%3E%3Ctext x=%2250%25%22 y=%2250%25%22 dominantBaseline=%22middle%22 textAnchor=%22middle%22 fontFamily=%22serif%22 fontSize=%2216%22 fill=%22white%22%3ESapiens%3C/text%3E%3C/svg%3E')",
-    description: "From the Stone Age to Modern Times, explore the history of humankind and how we changed the world.",
-    available: false,
-  },
-  {
-    id: 5,
-    title: "Educated",
-    author: "Tara Westover",
-    category: "Biography",
-    language: "English",
-    isbn: "978-0399590504",
-    publisher: "Random House",
-    year: 2018,
-    rating: 4.5,
-    cover:
-      "url('data:image/svg+xml,%3Csvg xmlns=%22http://www.w3.org/2000/svg%22 width=%22150%22 height=%22200%22%3E%3Crect fill=%22%2310B981%22 width=%22150%22 height=%22200%22/%3E%3Ctext x=%2250%25%22 y=%2250%25%22 dominantBaseline=%22middle%22 textAnchor=%22middle%22 fontFamily=%22serif%22 fontSize=%2216%22 fill=%22white%22%3EEducated%3C/text%3E%3C/svg%3E')",
-    description:
-      "A memoir about a young woman who leaves her survivalist family and gets an education at Cambridge University.",
-    available: true,
-  },
-  {
-    id: 6,
-    title: "The Great Gatsby",
-    author: "F. Scott Fitzgerald",
-    category: "Fiction",
-    language: "English",
-    isbn: "978-0743273565",
-    publisher: "Scribner",
-    year: 1925,
-    rating: 4.2,
-    cover:
-      "url('data:image/svg+xml,%3Csvg xmlns=%22http://www.w3.org/2000/svg%22 width=%22150%22 height=%22200%22%3E%3Crect fill=%22%23F59E0B%22 width=%22150%22 height=%22200%22/%3E%3Ctext x=%2250%25%22 y=%2250%25%22 dominantBaseline=%22middle%22 textAnchor=%22middle%22 fontFamily=%22serif%22 fontSize=%2216%22 fill=%22white%22%3EThe Great Gatsby%3C/text%3E%3C/svg%3E')",
-    description:
-      "A classic American novel set in the Jazz Age, exploring themes of wealth, love, and the American Dream.",
-    available: true,
-  },
-]
+type ApiCategory = { id: number; name: string }
+type ApiEditor = { id: number; name: string }
+type ApiAuthor = { id: number; nom: string; prenom: string }
+
+type ApiLivre = {
+  id: number
+  titre: string
+  isbn: string
+  description?: string | null
+  langue?: string | null
+  anneePublication?: number | null
+  imageUrl?: string | null
+  category?: ApiCategory | null
+  editor?: ApiEditor | null
+  auteurs?: Array<{ author: ApiAuthor }> | null
+}
+
+type UiBook = {
+  id: number
+  titre: string
+  isbn: string
+  description?: string | null
+  langue?: string | null
+  anneePublication?: number | null
+  imageUrl?: string | null
+  categoryName?: string | null
+  editorName?: string | null
+  authorsLabel: string
+}
+
+const API_BASE = process.env.NEXT_PUBLIC_API_BASE_URL || "http://127.0.0.1:3001"
+
+async function apiGet<T>(path: string): Promise<T> {
+  const res = await fetch(`${API_BASE}${path}`, {
+    cache: "no-store",
+    credentials: "include",
+  })
+  if (!res.ok) throw new Error(await res.text())
+  return (await res.json()) as T
+}
+
+function normalizeUiBook(b: ApiLivre): UiBook {
+  const authors = (b.auteurs || [])
+    .map((x) => x?.author)
+    .filter(Boolean)
+    .map((a) => `${a!.prenom} ${a!.nom}`.trim())
+    .filter(Boolean)
+  return {
+    id: b.id,
+    titre: b.titre,
+    isbn: b.isbn,
+    description: b.description ?? null,
+    langue: b.langue ?? null,
+    anneePublication: b.anneePublication ?? null,
+    imageUrl: b.imageUrl ?? null,
+    categoryName: b.category?.name ?? null,
+    editorName: b.editor?.name ?? null,
+    authorsLabel: authors.length ? authors.join(", ") : "—",
+  }
+}
 
 export default function DiscoverPage() {
   const [searchQuery, setSearchQuery] = useState("")
   const [category, setCategory] = useState("all")
   const [language, setLanguage] = useState("all")
   const [author, setAuthor] = useState("all")
-  const [isbn, setIsbn] = useState("") // Add ISBN filter state
-  const [selectedBook, setSelectedBook] = useState<(typeof mockBooks)[0] | null>(null)
+  const [isbn, setIsbn] = useState("")
+
+  const [books, setBooks] = useState<UiBook[]>([])
+  const [loading, setLoading] = useState(false)
+  const [error, setError] = useState<string | null>(null)
+
+  const [selectedBook, setSelectedBook] = useState<UiBook | null>(null)
   const [favorites, setFavorites] = useState<number[]>([])
-
-  const filteredBooks = mockBooks.filter((book) => {
-    const matchesSearch =
-      searchQuery === "" ||
-      book.title.toLowerCase().includes(searchQuery.toLowerCase()) ||
-      book.author.toLowerCase().includes(searchQuery.toLowerCase()) ||
-      book.isbn.includes(searchQuery)
-
-    const matchesCategory = category === "all" || book.category === category
-    const matchesLanguage = language === "all" || book.language === language
-    const matchesAuthor = author === "all" || book.author === author
-    const matchesIsbn = isbn === "" || book.isbn.includes(isbn)
-
-    return matchesSearch && matchesCategory && matchesLanguage && matchesAuthor && matchesIsbn
+  const [actionMessage, setActionMessage] = useState<string | null>(null)
+  const [meUserId, setMeUserId] = useState<number | null>(null)
+  const [acting, setActing] = useState(false)
+  const [borrowedLivreIds, setBorrowedLivreIds] = useState<Set<number>>(new Set())
+  const [reservationByLivreId, setReservationByLivreId] = useState<Map<number, { id: number; statut: string }>>(new Map())
+  const [reservationDate, setReservationDate] = useState<string>(new Date().toISOString().slice(0, 10))
+  const [reservationDueDate, setReservationDueDate] = useState<string>(() => {
+    const start = new Date()
+    const due = new Date(start.getTime() + 7 * 24 * 60 * 60 * 1000)
+    return due.toISOString().slice(0, 10)
   })
+
+  const refresh = async () => {
+    setLoading(true)
+    setError(null)
+    try {
+      const data = await apiGet<ApiLivre[]>("/livres")
+      setBooks(data.map(normalizeUiBook))
+    } catch (e) {
+      const msg = e instanceof Error ? e.message : "Failed to load books"
+      setError(msg)
+    } finally {
+      setLoading(false)
+    }
+  }
+
+  useEffect(() => {
+    void refresh()
+
+    ;(async () => {
+      try {
+        const me = await apiMe()
+        const uid = me.user?.id ?? null
+        setMeUserId(uid)
+        if (uid) {
+          try {
+            const [emprunts, reservations] = await Promise.all([apiMyBorrowed(uid), apiMyReservations(uid)])
+            const borrowedSet = new Set<number>()
+            for (const e of emprunts as any[]) borrowedSet.add(e.livreId)
+            const resMap = new Map<number, { id: number; statut: string }>()
+            for (const r of reservations as any[]) resMap.set(r.livreId, { id: r.id, statut: r.statut })
+            setBorrowedLivreIds(borrowedSet)
+            setReservationByLivreId(resMap)
+          } catch {
+            // ignore
+          }
+        }
+      } catch {
+        setMeUserId(null)
+      }
+    })()
+  }, [])
+
+  const refreshMyState = async (uid: number) => {
+    const [emprunts, reservations] = await Promise.all([apiMyBorrowed(uid), apiMyReservations(uid)])
+    const borrowedSet = new Set<number>()
+    for (const e of emprunts as any[]) borrowedSet.add(e.livreId)
+    const resMap = new Map<number, { id: number; statut: string }>()
+    for (const r of reservations as any[]) resMap.set(r.livreId, { id: r.id, statut: r.statut })
+    setBorrowedLivreIds(borrowedSet)
+    setReservationByLivreId(resMap)
+  }
+
+  const categoryOptions = useMemo(() => {
+    const set = new Set<string>()
+    for (const b of books) if (b.categoryName) set.add(b.categoryName)
+    return Array.from(set).sort((a, b) => a.localeCompare(b))
+  }, [books])
+
+  const languageOptions = useMemo(() => {
+    const set = new Set<string>()
+    for (const b of books) if (b.langue) set.add(b.langue)
+    return Array.from(set).sort((a, b) => a.localeCompare(b))
+  }, [books])
+
+  const authorOptions = useMemo(() => {
+    const set = new Set<string>()
+    for (const b of books) {
+      if (!b.authorsLabel || b.authorsLabel === "—") continue
+      for (const part of b.authorsLabel.split(",")) {
+        const name = part.trim()
+        if (name) set.add(name)
+      }
+    }
+    return Array.from(set).sort((a, b) => a.localeCompare(b))
+  }, [books])
+
+  const filteredBooks = useMemo(() => {
+    const q = searchQuery.trim().toLowerCase()
+    const isbnQ = isbn.trim()
+
+    return books.filter((book) => {
+      const matchesSearch =
+        !q ||
+        book.titre.toLowerCase().includes(q) ||
+        book.authorsLabel.toLowerCase().includes(q) ||
+        book.isbn.includes(searchQuery)
+
+      const matchesCategory = category === "all" || book.categoryName === category
+      const matchesLanguage = language === "all" || book.langue === language
+      const matchesAuthor = author === "all" || book.authorsLabel.split(",").map((x) => x.trim()).includes(author)
+      const matchesIsbn = !isbnQ || book.isbn.includes(isbnQ)
+
+      return matchesSearch && matchesCategory && matchesLanguage && matchesAuthor && matchesIsbn
+    })
+  }, [author, books, category, isbn, language, searchQuery])
 
   const toggleFavorite = (id: number) => {
     setFavorites((prev) => (prev.includes(id) ? prev.filter((fav) => fav !== id) : [...prev, id]))
   }
 
+  const requireLogin = (): number | null => {
+    if (!meUserId) {
+      setActionMessage("Please login first to borrow or reserve.")
+      setTimeout(() => setActionMessage(null), 2500)
+      return null
+    }
+    return meUserId
+  }
+
+  const onBorrow = async (book: UiBook) => {
+    const uid = requireLogin()
+    if (!uid) return
+
+    if (borrowedLivreIds.has(book.id)) {
+      setActionMessage("You already borrowed this book.")
+      setTimeout(() => setActionMessage(null), 2500)
+      return
+    }
+
+    setActing(true)
+    try {
+      await apiBorrow(book.id, uid)
+      setActionMessage(`Borrowed: “${book.titre}”.`)
+      await refresh()
+      await refreshMyState(uid)
+    } catch (e) {
+      const msg = e instanceof Error ? e.message : "Borrow failed"
+      setActionMessage(msg)
+    } finally {
+      setActing(false)
+      setTimeout(() => setActionMessage(null), 3500)
+    }
+  }
+
+  const onReserve = async (book: UiBook) => {
+    const uid = requireLogin()
+    if (!uid) return
+
+    if (reservationByLivreId.has(book.id)) {
+      setActionMessage("You already have a reservation for this book.")
+      setTimeout(() => setActionMessage(null), 2500)
+      return
+    }
+
+    setActing(true)
+    try {
+      const iso = new Date(`${reservationDate}T00:00:00.000Z`).toISOString()
+      const dueIso = reservationDueDate ? new Date(`${reservationDueDate}T00:00:00.000Z`).toISOString() : undefined
+      await apiReserve(book.id, uid, iso, dueIso)
+      setActionMessage(`Reserved: “${book.titre}”.`)
+      await refresh()
+      await refreshMyState(uid)
+    } catch (e) {
+      const msg = e instanceof Error ? e.message : "Reservation failed"
+      setActionMessage(msg)
+    } finally {
+      setActing(false)
+      setTimeout(() => setActionMessage(null), 3500)
+    }
+  }
+
+  const onCancelReservationForBook = async (book: UiBook) => {
+    const uid = requireLogin()
+    if (!uid) return
+    const res = reservationByLivreId.get(book.id)
+    if (!res) return
+
+    setActing(true)
+    try {
+      await apiCancelReservation(res.id)
+      setActionMessage("Reservation cancelled.")
+      await refresh()
+      await refreshMyState(uid)
+    } catch (e) {
+      const msg = e instanceof Error ? e.message : "Cancel failed"
+      setActionMessage(msg)
+    } finally {
+      setActing(false)
+      setTimeout(() => setActionMessage(null), 3500)
+    }
+  }
+
   return (
     <div className="p-6 space-y-6">
+      <div className="flex items-start justify-between gap-4">
+        <div>
+          <h1 className="text-3xl font-bold text-slate-900 dark:text-white">Discover</h1>
+          <p className="text-slate-600 dark:text-slate-400">Find books by title, author, category, language, or ISBN</p>
+        </div>
+
+      </div>
+
+      {error && (
+        <div className="p-3 rounded-lg border border-red-200 bg-red-50 text-red-700 dark:border-red-900 dark:bg-red-950/40 dark:text-red-300 text-sm">
+          {error}
+        </div>
+      )}
+
+      {actionMessage && (
+        <div className="p-3 rounded-lg border border-amber-200 bg-amber-50 text-amber-800 dark:border-amber-900 dark:bg-amber-950/40 dark:text-amber-200 text-sm">
+          {actionMessage}
+        </div>
+      )}
       {/* Search and Filters */}
       <div className="space-y-4">
         {/* Search Bar */}
@@ -159,11 +320,11 @@ export default function DiscoverPage() {
             </SelectTrigger>
             <SelectContent>
               <SelectItem value="all">All Categories</SelectItem>
-              <SelectItem value="Fiction">Fiction</SelectItem>
-              <SelectItem value="Science">Science</SelectItem>
-              <SelectItem value="History">History</SelectItem>
-              <SelectItem value="Self-Help">Self-Help</SelectItem>
-              <SelectItem value="Biography">Biography</SelectItem>
+              {categoryOptions.map((c) => (
+                <SelectItem key={c} value={c}>
+                  {c}
+                </SelectItem>
+              ))}
             </SelectContent>
           </Select>
 
@@ -173,10 +334,11 @@ export default function DiscoverPage() {
             </SelectTrigger>
             <SelectContent>
               <SelectItem value="all">All Languages</SelectItem>
-              <SelectItem value="English">English</SelectItem>
-              <SelectItem value="French">French</SelectItem>
-              <SelectItem value="Spanish">Spanish</SelectItem>
-              <SelectItem value="German">German</SelectItem>
+              {languageOptions.map((l) => (
+                <SelectItem key={l} value={l}>
+                  {l}
+                </SelectItem>
+              ))}
             </SelectContent>
           </Select>
 
@@ -186,9 +348,9 @@ export default function DiscoverPage() {
             </SelectTrigger>
             <SelectContent>
               <SelectItem value="all">All Authors</SelectItem>
-              {Array.from(new Set(mockBooks.map((b) => b.author))).map((auth) => (
-                <SelectItem key={auth} value={auth}>
-                  {auth}
+              {authorOptions.map((a) => (
+                <SelectItem key={a} value={a}>
+                  {a}
                 </SelectItem>
               ))}
             </SelectContent>
@@ -236,17 +398,25 @@ export default function DiscoverPage() {
               onClick={() => setSelectedBook(book)}
             >
               {/* Book Cover */}
-              <div className="w-full h-full bg-gradient-to-br from-amber-400 to-orange-500 flex items-center justify-center relative">
-                <span className="text-white text-center px-4 font-serif text-sm font-bold">{book.title}</span>
-                {!book.available && (
-                  <div className="absolute inset-0 bg-black/50 flex items-center justify-center">
-                    <span className="text-white font-bold">Out of Stock</span>
-                  </div>
-                )}
-              </div>
+              {book.imageUrl ? (
+                <div className="w-full h-full bg-slate-100 dark:bg-slate-900">
+                  <img
+                    src={book.imageUrl.startsWith("http") ? book.imageUrl : `${API_BASE}${book.imageUrl}`}
+                    alt={book.titre}
+                    className="w-full h-full object-cover"
+                    loading="lazy"
+                  />
+                </div>
+              ) : (
+                <div className="w-full h-full bg-gradient-to-br from-amber-400 to-orange-500 flex items-center justify-center relative">
+                  <span className="text-white text-center px-4 font-serif text-sm font-bold line-clamp-3">
+                    {book.titre}
+                  </span>
+                </div>
+              )}
 
               {/* Hover Actions */}
-              <div className="absolute inset-0 bg-black/80 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center gap-2">
+              <div className="absolute inset-0 bg-black/80 opacity-0 group-hover:opacity-100 transition-opacity flex flex-col items-center justify-center gap-2 px-4">
                 <Button
                   size="sm"
                   className="bg-amber-600 hover:bg-amber-700"
@@ -261,6 +431,43 @@ export default function DiscoverPage() {
                 <Button
                   size="sm"
                   variant="outline"
+                  disabled={acting}
+                  onClick={(e) => {
+                    e.stopPropagation()
+                    void onBorrow(book)
+                  }}
+                >
+                  <BookMarked className="w-4 h-4 mr-1" />
+                  Borrow
+                </Button>
+                {reservationByLivreId.has(book.id) ? (
+                  <Button
+                    size="sm"
+                    variant="outline"
+                    disabled={acting}
+                    onClick={(e) => {
+                      e.stopPropagation()
+                      void onCancelReservationForBook(book)
+                    }}
+                  >
+                    Cancel
+                  </Button>
+                ) : (
+                  <Button
+                    size="sm"
+                    variant="outline"
+                    disabled={acting}
+                    onClick={(e) => {
+                      e.stopPropagation()
+                      void onReserve(book)
+                    }}
+                  >
+                    Reserve
+                  </Button>
+                )}
+                <Button
+                  size="sm"
+                  variant="outline"
                   onClick={(e) => {
                     e.stopPropagation()
                     toggleFavorite(book.id)
@@ -272,13 +479,13 @@ export default function DiscoverPage() {
             </div>
 
             {/* Book Info */}
-            <h3 className="font-semibold text-slate-900 dark:text-white text-sm line-clamp-2">{book.title}</h3>
-            <p className="text-xs text-slate-600 dark:text-slate-400 mb-2">{book.author}</p>
+            <h3 className="font-semibold text-slate-900 dark:text-white text-sm line-clamp-2">{book.titre}</h3>
+            <p className="text-xs text-slate-600 dark:text-slate-400 mb-2 line-clamp-1">{book.authorsLabel}</p>
             <div className="flex items-center justify-between">
               <Badge variant="secondary" className="text-xs">
-                {book.category}
+                {book.categoryName || "Uncategorized"}
               </Badge>
-              <span className="text-xs text-amber-600 dark:text-amber-500">★ {book.rating}</span>
+              <span className="text-xs text-slate-600 dark:text-slate-400">{book.langue || "—"}</span>
             </div>
           </div>
         ))}
@@ -304,15 +511,25 @@ export default function DiscoverPage() {
 
               <div className="grid md:grid-cols-3 gap-6 mt-4">
                 {/* Book Cover */}
-                <div className="h-72 rounded-lg bg-gradient-to-br from-amber-400 to-orange-500 flex items-center justify-center">
-                  <span className="text-white text-center px-4 font-serif font-bold text-lg">{selectedBook.title}</span>
+                <div className="h-72 rounded-lg overflow-hidden bg-slate-100 dark:bg-slate-900 flex items-center justify-center">
+                  {selectedBook.imageUrl ? (
+                    <img
+                      src={selectedBook.imageUrl.startsWith("http") ? selectedBook.imageUrl : `${API_BASE}${selectedBook.imageUrl}`}
+                      alt={selectedBook.titre}
+                      className="w-full h-full object-cover"
+                    />
+                  ) : (
+                    <div className="w-full h-full bg-gradient-to-br from-amber-400 to-orange-500 flex items-center justify-center">
+                      <span className="text-white text-center px-4 font-serif font-bold text-lg">{selectedBook.titre}</span>
+                    </div>
+                  )}
                 </div>
 
                 {/* Book Info */}
                 <div className="md:col-span-2 space-y-4">
                   <div>
-                    <h2 className="text-2xl font-bold text-slate-900 dark:text-white">{selectedBook.title}</h2>
-                    <p className="text-lg text-amber-600 dark:text-amber-500">{selectedBook.author}</p>
+                    <h2 className="text-2xl font-bold text-slate-900 dark:text-white">{selectedBook.titre}</h2>
+                    <p className="text-lg text-amber-600 dark:text-amber-500">{selectedBook.authorsLabel}</p>
                   </div>
 
                   <div className="space-y-2 text-sm">
@@ -321,38 +538,90 @@ export default function DiscoverPage() {
                       <span className="font-mono text-slate-900 dark:text-white">{selectedBook.isbn}</span>
                     </div>
                     <div className="flex justify-between">
-                      <span className="text-slate-600 dark:text-slate-400">Publisher:</span>
-                      <span className="text-slate-900 dark:text-white">{selectedBook.publisher}</span>
+                      <span className="text-slate-600 dark:text-slate-400">Editor:</span>
+                      <span className="text-slate-900 dark:text-white">{selectedBook.editorName || "—"}</span>
                     </div>
                     <div className="flex justify-between">
                       <span className="text-slate-600 dark:text-slate-400">Published:</span>
-                      <span className="text-slate-900 dark:text-white">{selectedBook.year}</span>
+                      <span className="text-slate-900 dark:text-white">{selectedBook.anneePublication ?? "—"}</span>
                     </div>
                     <div className="flex justify-between">
                       <span className="text-slate-600 dark:text-slate-400">Language:</span>
-                      <span className="text-slate-900 dark:text-white">{selectedBook.language}</span>
+                      <span className="text-slate-900 dark:text-white">{selectedBook.langue || "—"}</span>
                     </div>
                     <div className="flex justify-between">
                       <span className="text-slate-600 dark:text-slate-400">Category:</span>
-                      <Badge>{selectedBook.category}</Badge>
-                    </div>
-                    <div className="flex justify-between">
-                      <span className="text-slate-600 dark:text-slate-400">Rating:</span>
-                      <span className="text-amber-600 dark:text-amber-500 font-semibold">★ {selectedBook.rating}</span>
+                      <Badge>{selectedBook.categoryName || "Uncategorized"}</Badge>
                     </div>
                   </div>
 
                   <div>
                     <h3 className="font-semibold text-slate-900 dark:text-white mb-2">Description</h3>
-                    <p className="text-sm text-slate-600 dark:text-slate-400">{selectedBook.description}</p>
+                    <p className="text-sm text-slate-600 dark:text-slate-400">
+                      {selectedBook.description || "No description provided."}
+                    </p>
                   </div>
+
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+                      <div>
+                        <label className="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-1">
+                          Reservation date
+                        </label>
+                        <input
+                          type="date"
+                          className="w-full h-10 rounded-md border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-950 px-3 text-sm"
+                          value={reservationDate}
+                          onChange={(e) => setReservationDate(e.target.value)}
+                        />
+                        <p className="mt-1 text-xs text-slate-500 dark:text-slate-500">
+                          Used to compute queue order when book is out of stock.
+                        </p>
+                      </div>
+
+                      <div>
+                        <label className="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-1">
+                          Reservation due date
+                        </label>
+                        <input
+                          type="date"
+                          className="w-full h-10 rounded-md border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-950 px-3 text-sm"
+                          value={reservationDueDate}
+                          onChange={(e) => setReservationDueDate(e.target.value)}
+                        />
+                        <p className="mt-1 text-xs text-slate-500 dark:text-slate-500">
+                          Optional: last day to pick up before expiration.
+                        </p>
+                      </div>
+                    </div>
 
                   {/* Action Buttons */}
                   <div className="pt-4 space-y-2">
-                    <Button className="w-full bg-amber-600 hover:bg-amber-700" disabled={!selectedBook.available}>
+                    <Button
+                      className="w-full bg-amber-600 hover:bg-amber-700"
+                      onClick={() => void onBorrow(selectedBook)}
+                      disabled={acting}
+                    >
                       <BookMarked className="w-4 h-4 mr-2" />
-                      {selectedBook.available ? "Borrow This Book" : "Out of Stock"}
+                      Borrow This Book
                     </Button>
+                    <Button
+                      variant="outline"
+                      className="w-full bg-transparent"
+                      onClick={() => void onReserve(selectedBook)}
+                      disabled={acting}
+                    >
+                      Reserve This Book
+                    </Button>
+                    {reservationByLivreId.has(selectedBook.id) ? (
+                      <Button
+                        variant="outline"
+                        className="w-full bg-transparent"
+                        onClick={() => void onCancelReservationForBook(selectedBook)}
+                        disabled={acting}
+                      >
+                        Cancel Reservation
+                      </Button>
+                    ) : null}
                     <Button
                       variant="outline"
                       className="w-full bg-transparent"

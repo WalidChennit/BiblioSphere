@@ -12,6 +12,56 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import Link from "next/link"
 import { BookOpen } from "lucide-react"
 import { useRouter } from "next/navigation"
+import { validateNINWithMessage } from "dz-nin-checker"
+
+const API_BASE = process.env.NEXT_PUBLIC_API_BASE_URL || "http://127.0.0.1:3001"
+
+function passwordStrength(password: string): { score: number; label: string; color: string } {
+  const p = password
+  if (!p) return { score: 0, label: "", color: "bg-slate-200" }
+
+  let score = 0
+  if (p.length >= 8) score += 1
+  if (/[a-z]/.test(p)) score += 1
+  if (/[A-Z]/.test(p)) score += 1
+  if (/[0-9]/.test(p)) score += 1
+  if (/[^A-Za-z0-9]/.test(p)) score += 1
+
+  const labelByScore: Record<number, string> = {
+    0: "",
+    1: "Very weak",
+    2: "Weak",
+    3: "Medium",
+    4: "Strong",
+    5: "Very strong",
+  }
+  const colorByScore: Record<number, string> = {
+    0: "bg-slate-200",
+    1: "bg-red-500",
+    2: "bg-orange-500",
+    3: "bg-amber-500",
+    4: "bg-green-500",
+    5: "bg-emerald-600",
+  }
+
+  return { score, label: labelByScore[score] || "", color: colorByScore[score] || "bg-slate-200" }
+}
+
+async function parseErrorMessage(res: Response): Promise<string> {
+  try {
+    const data = (await res.json()) as any
+    if (typeof data?.message === "string") return data.message
+    if (Array.isArray(data?.message)) return data.message.join("\n")
+    if (typeof data?.error === "string") return data.error
+  } catch {
+    // ignore
+  }
+  try {
+    return await res.text()
+  } catch {
+    return "Request failed"
+  }
+}
 
 export default function SignupPage() {
   const [formData, setFormData] = useState({
@@ -28,7 +78,21 @@ export default function SignupPage() {
   })
   const [agreeTerms, setAgreeTerms] = useState(false)
   const [error, setError] = useState("")
+  const [submitting, setSubmitting] = useState(false)
   const router = useRouter()
+
+  const strength = passwordStrength(formData.password)
+
+  const ninError = (() => {
+    const raw = formData.nin.trim()
+    if (!raw) return ""
+    if (!/^\d{18}$/.test(raw)) return "NIN must be exactly 18 digits"
+    const result = validateNINWithMessage(raw)
+    if (!result?.isValid) {
+      return typeof result?.message === "string" ? result.message.replace(/^❌\s*/, "") : "Invalid NIN"
+    }
+    return ""
+  })()
 
   const handleChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     setFormData({
@@ -44,9 +108,10 @@ export default function SignupPage() {
     })
   }
 
-  const handleSubmit = (e: React.FormEvent) => {
+  const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
     setError("")
+    setSubmitting(true)
 
     // Validation
     if (
@@ -58,6 +123,13 @@ export default function SignupPage() {
       !formData.dateOfBirth
     ) {
       setError("Please fill in all required fields")
+      setSubmitting(false)
+      return
+    }
+
+    if (ninError) {
+      setError(ninError)
+      setSubmitting(false)
       return
     }
 
@@ -71,25 +143,62 @@ export default function SignupPage() {
       return
     }
 
-    if (formData.password.length < 6) {
-      setError("Password must be at least 6 characters")
+    // Password constraints (degré)
+    // Required: >= 8 chars, at least 1 lowercase, 1 uppercase, 1 number.
+    if (formData.password.length < 8) {
+      setError("Password must be at least 8 characters")
+      setSubmitting(false)
+      return
+    }
+    if (!/[a-z]/.test(formData.password) || !/[A-Z]/.test(formData.password) || !/[0-9]/.test(formData.password)) {
+      setError("Password must include lowercase, uppercase and a number")
+      setSubmitting(false)
+      return
+    }
+
+    // Optional but recommended: enforce at least Medium strength
+    if (strength.score < 3) {
+      setError("Password strength is too low")
+      setSubmitting(false)
       return
     }
 
     if (!agreeTerms) {
       setError("You must agree to the terms and conditions")
+      setSubmitting(false)
       return
     }
 
-    // Mock signup - replace with actual authentication
-    console.log("Signup attempt:", formData)
+    try {
+      const payload = {
+        email: formData.email,
+        firstname: formData.firstName,
+        lastname: formData.lastName,
+        nin: formData.nin,
+        matricule: formData.role === "student" ? formData.matricule : undefined,
+        birthDate: formData.dateOfBirth,
+        phone: formData.phoneNumber,
+        role: formData.role === "student" ? "etudiant" : "membre_public",
+        password: formData.password,
+      }
 
-    if (formData.role === "student") {
-      router.push("/student")
-    } else if (formData.role === "admin") {
-      router.push("/dashboard")
-    } else {
-      router.push("/discover")
+      const res = await fetch(`${API_BASE}/users`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(payload),
+      })
+
+      if (!res.ok) {
+        const msg = await parseErrorMessage(res)
+        throw new Error(msg || "Signup failed")
+      }
+
+      // No auth session implemented yet: always redirect to login.
+      router.push("/login")
+    } catch (e) {
+      setError(e instanceof Error ? e.message : "Signup failed")
+    } finally {
+      setSubmitting(false)
     }
   }
 
@@ -178,11 +287,17 @@ export default function SignupPage() {
                     id="nin"
                     name="nin"
                     type="text"
-                    placeholder="NIN"
+                    inputMode="numeric"
+                    pattern="\d{18}"
+                    maxLength={18}
+                    placeholder="18 digits"
                     value={formData.nin}
                     onChange={handleChange}
                     className="bg-slate-50 dark:bg-slate-900"
                   />
+                  {ninError ? (
+                    <div className="text-xs text-red-600 dark:text-red-400">{ninError}</div>
+                  ) : null}
                 </div>
                 <div className="space-y-2">
                   <Label htmlFor="phoneNumber">Phone Number *</Label>
@@ -237,6 +352,23 @@ export default function SignupPage() {
                   onChange={handleChange}
                   className="bg-slate-50 dark:bg-slate-900"
                 />
+                {formData.password ? (
+                  <div className="space-y-1">
+                    <div className="flex items-center justify-between text-xs">
+                      <span className="text-slate-600 dark:text-slate-400">Password strength</span>
+                      <span className="font-medium text-slate-700 dark:text-slate-200">{strength.label}</span>
+                    </div>
+                    <div className="h-2 w-full rounded-full bg-slate-200 dark:bg-slate-800 overflow-hidden">
+                      <div
+                        className={`h-full ${strength.color}`}
+                        style={{ width: `${(strength.score / 5) * 100}%` }}
+                      />
+                    </div>
+                    <div className="text-xs text-slate-600 dark:text-slate-400">
+                      Min 8 chars, uppercase, lowercase, number.
+                    </div>
+                  </div>
+                ) : null}
               </div>
 
               <div className="space-y-2">
@@ -266,8 +398,12 @@ export default function SignupPage() {
                 </Label>
               </div>
 
-              <Button type="submit" className="w-full bg-amber-600 hover:bg-amber-700 text-white">
-                Create Account
+              <Button
+                type="submit"
+                className="w-full bg-amber-600 hover:bg-amber-700 text-white"
+                disabled={submitting}
+              >
+                {submitting ? "Creating..." : "Create Account"}
               </Button>
             </form>
 
