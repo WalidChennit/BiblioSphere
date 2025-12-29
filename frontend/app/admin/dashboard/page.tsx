@@ -9,6 +9,7 @@ import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { apiFetch } from "@/lib/api"
 import { ClientOnly } from "@/components/ClientOnly"
+import { apiMe } from "@/lib/student"
 
 type AdminStatsResponse = {
   kpis: {
@@ -33,6 +34,7 @@ export default function AdminDashboard() {
   const [stats, setStats] = useState<AdminStatsResponse | null>(null)
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
+  const [displayName, setDisplayName] = useState<string>("")
 
   useEffect(() => {
     let cancelled = false
@@ -44,9 +46,28 @@ export default function AdminDashboard() {
       try {
         setLoading(true)
         setError(null)
-        const res = await apiFetch(`/admin/stats?period=${encodeURIComponent(periodParam)}`, { cache: "no-store" })
+        const [me, res] = await Promise.all([
+          apiMe(),
+          apiFetch(`/admin/stats?period=${encodeURIComponent(periodParam)}`, { cache: "no-store" }),
+        ])
         const data = (await res.json()) as AdminStatsResponse
-        if (!cancelled) setStats(data)
+        if (cancelled) return
+
+        if (me.user?.id) {
+          try {
+            const usersRes = await apiFetch("/users", { cache: "no-store" })
+            if (usersRes.ok) {
+              const users = (await usersRes.json()) as any[]
+              const full = users.find((u) => u.id === me.user!.id)
+              const name = full ? `${full.prenom ?? ""} ${full.nom ?? ""}`.trim() : ""
+              setDisplayName(name)
+            }
+          } catch {
+            // ignore
+          }
+        }
+
+        setStats(data)
       } catch (e: any) {
         if (!cancelled) setError(e?.message || "Failed to load dashboard stats")
       } finally {
@@ -85,7 +106,9 @@ export default function AdminDashboard() {
       <main className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
         <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-4 mb-8">
           <div>
-            <h1 className="text-3xl font-bold text-slate-900 dark:text-white">Dashboard</h1>
+            <h1 className="text-3xl font-bold text-slate-900 dark:text-white">
+              {displayName ? `Welcome, ${displayName}` : "Dashboard"}
+            </h1>
             <p className="text-slate-600 dark:text-slate-400">Library overview and analytics</p>
           </div>
 

@@ -4,12 +4,14 @@ import { useEffect, useMemo, useState } from "react"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { AlertTriangle, Book, BookOpen, Heart } from "lucide-react"
 import { apiFetch } from "@/lib/api"
+import { apiMe } from "@/lib/student"
 
 export default function PersonalDashboard() {
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string>("")
   const [stats, setStats] = useState<any>(null)
   const [usersById, setUsersById] = useState<Map<number, any>>(new Map())
+  const [displayName, setDisplayName] = useState<string>("")
 
   useEffect(() => {
     let cancelled = false
@@ -29,6 +31,15 @@ export default function PersonalDashboard() {
         const users = (await resUsers.json()) as any[]
         const map = new Map<number, any>()
         for (const u of users) map.set(u.id, u)
+
+        try {
+          const me = await apiMe()
+          const full = me.user?.id ? map.get(me.user.id) : null
+          const name = full ? `${full.prenom ?? ""} ${full.nom ?? ""}`.trim() : ""
+          if (!cancelled) setDisplayName(name)
+        } catch {
+          // ignore
+        }
 
         if (cancelled) return
         setStats(data)
@@ -93,6 +104,11 @@ export default function PersonalDashboard() {
 
   return (
     <div className="p-6 space-y-6">
+      <div>
+        <h1 className="text-3xl font-bold text-slate-900 dark:text-white">{displayName ? `Welcome, ${displayName}` : "Dashboard"}</h1>
+        <p className="text-slate-600 dark:text-slate-400">Overview and operations</p>
+      </div>
+
       {error ? (
         <div className="p-3 bg-red-50 dark:bg-red-900/20 text-red-600 dark:text-red-400 rounded-md text-sm">
           {error}

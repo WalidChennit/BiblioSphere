@@ -41,6 +41,7 @@ export default function StudentDashboard() {
   const [meUserId, setMeUserId] = useState<number | null>(null)
   const [stats, setStats] = useState<DashboardStats | null>(null)
   const [activeBorrows, setActiveBorrows] = useState<DashboardBorrowedBook[]>([])
+  const [displayName, setDisplayName] = useState<string>("")
 
   const refresh = async () => {
     setLoading(true)
@@ -53,6 +54,21 @@ export default function StudentDashboard() {
         setStats(null)
         setActiveBorrows([])
         return
+      }
+
+      try {
+        const resUsers = await fetch(`${process.env.NEXT_PUBLIC_API_BASE_URL || "http://localhost:3001"}/users`, {
+          credentials: "include",
+          cache: "no-store",
+        })
+        if (resUsers.ok) {
+          const users = (await resUsers.json()) as any[]
+          const full = users.find((u) => u.id === uid)
+          const name = full ? `${full.prenom ?? ""} ${full.nom ?? ""}`.trim() : ""
+          setDisplayName(name)
+        }
+      } catch {
+        // ignore
       }
 
       const [s, emprunts] = await Promise.all([apiStudentStats(uid), apiMyBorrowed(uid)])
@@ -110,6 +126,11 @@ export default function StudentDashboard() {
 
   return (
     <div className="p-6 space-y-6">
+      <div>
+        <h1 className="text-3xl font-bold text-slate-900 dark:text-white">{displayName ? `Welcome, ${displayName}` : "Dashboard"}</h1>
+        <p className="text-slate-600 dark:text-slate-400">Your reading activity at a glance</p>
+      </div>
+
       {error && (
         <div className="p-3 rounded-lg border border-red-200 bg-red-50 text-red-700 dark:border-red-900 dark:bg-red-950/40 dark:text-red-300 text-sm">
           {error}
