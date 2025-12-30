@@ -44,6 +44,8 @@ model User {
   status          UserStatus    @default(ACTIVE)
   emprunts        Emprunt[]
   reservations    Reservation[]
+  notifications   Notification[]
+  notificationPrefs Json?
   createdAt       DateTime      @default(now())
 }
 
@@ -155,4 +157,31 @@ model Reservation {
   dateReservationDue DateTime?
   statut          String      @default("en_attente")
   createdAt       DateTime   @default(now())
+}
+
+// -----------------------------------------------------
+// NOTIFICATIONS
+// -----------------------------------------------------
+model Notification {
+  id        Int      @id @default(autoincrement())
+  createdAt DateTime @default(now())
+  readAt    DateTime?
+
+  // Either a direct recipient (most cases) ...
+  userId Int?
+  user   User? @relation(fields: [userId], references: [id])
+
+  // ...or a role-targeted notification (used for admin pseudo-account)
+  roleTarget Role?
+
+  type      String
+  title     String
+  message   String
+  href      String?
+
+  // Prevent duplicates across cron runs & event hooks
+  dedupeKey String @unique
+
+  @@index([userId, createdAt])
+  @@index([roleTarget, createdAt])
 }

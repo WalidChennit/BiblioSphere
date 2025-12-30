@@ -2,10 +2,14 @@ import { Injectable, BadRequestException, NotFoundException } from '@nestjs/comm
 import { PrismaService } from '../prisma/prisma.service';
 import { CreateAuthorDto } from './dto/create-author.dto';
 import { UpdateAuthorDto } from './dto/update-author.dto';
+import { NotificationService } from '../notification/notification.service';
 
 @Injectable()
 export class AuthorService {
-  constructor(private prisma: PrismaService) {}
+  constructor(
+    private prisma: PrismaService,
+    private readonly notifications: NotificationService,
+  ) {}
 
   // ✅ CREATE
   async create(dto: CreateAuthorDto) {
@@ -21,12 +25,22 @@ export class AuthorService {
       throw new BadRequestException('Cet auteur existe déjà');
     }
 
-    return this.prisma.author.create({
+    const created = await this.prisma.author.create({
       data: {
         nom: dto.nom,
         prenom: dto.prenom,
       },
     });
+
+    await this.notifications.createForAllUsersByRole('personnel', (userId) => ({
+      type: 'PERSONNEL_AUTHOR_ADDED',
+      title: 'New author added',
+      message: `A new author has been added: ${dto.prenom} ${dto.nom}.`,
+      href: '/admin/people',
+      dedupeKey: `PERSONNEL_AUTHOR_ADDED:${created.id}:${userId}`,
+    }));
+
+    return created;
   }
 
   // ✅ GET ALL

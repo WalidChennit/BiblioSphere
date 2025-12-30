@@ -11,15 +11,31 @@ import * as bcrypt from 'bcrypt';
 import type { Response } from 'express';
 import type { AuthService } from '../auth/auth.service';
 import { Prisma, UserStatus } from '@prisma/client';
+import { NotificationService } from '../notification/notification.service';
+
+type NotificationPrefs = {
+  // Student
+  studentNewBooks?: boolean;
+  studentReservationAvailable?: boolean;
+  studentBorrowDueSoon?: boolean;
+
+  // Personnel
+  personnelReservationAlerts?: boolean;
+  personnelBorrowAlerts?: boolean;
+  personnelAuthorAdded?: boolean;
+};
 
 @Injectable()
 export class UserService {
-  constructor(private prisma: PrismaService) {}
+  constructor(
+    private prisma: PrismaService,
+    private readonly notifications: NotificationService,
+  ) {}
 
   async create(dto: CreateUserDto) {
     const passwordHash = await bcrypt.hash(dto.password, 10);
     try {
-      return await this.prisma.user.create({
+      const created = await this.prisma.user.create({
         data: {
           email: dto.email,
           prenom: dto.firstname,
@@ -33,6 +49,19 @@ export class UserService {
           createdAt: new Date(),
         },
       });
+
+      await this.notifications.create(
+        { kind: 'role', role: 'admin' },
+        {
+          type: 'ADMIN_USER_REGISTERED',
+          title: 'New user registered',
+          message: `New user registered: ${created.prenom} ${created.nom} (${created.email}).`,
+          href: '/admin/users',
+          dedupeKey: `ADMIN_USER_REGISTERED:${created.id}`,
+        },
+      );
+
+      return created;
     } catch (err) {
       if (err instanceof Prisma.PrismaClientKnownRequestError && err.code === 'P2002') {
         const fields = Array.isArray((err.meta as any)?.target)
@@ -115,7 +144,13 @@ export class UserService {
 
     // If the admin just disabled the currently logged-in user, force logout.
     if (status === UserStatus.INACTIVE && payload.sub === id) {
-      res.clearCookie('session', { path: '/' });
+      const isProd = process.env.NODE_ENV === 'production';
+      res.clearCookie('session', {
+        httpOnly: true,
+        sameSite: isProd ? 'none' : 'lax',
+        secure: isProd,
+        path: '/',
+      });
     }
 
     return updated;
@@ -237,5 +272,112 @@ export class UserService {
     });
 
     return { ok: true };
+  }
+
+  private sanitizeNotificationPrefsPatch(patch: Record<string, unknown>): Partial<NotificationPrefs> {
+    const allowedKeys: Array<keyof NotificationPrefs> = [
+      'studentNewBooks',
+      'studentReservationAvailable',
+      'studentBorrowDueSoon',
+      'personnelReservationAlerts',
+      'personnelBorrowAlerts',
+      'personnelAuthorAdded',
+    ];
+
+    const out: Partial<NotificationPrefs> = {};
+    for (const key of allowedKeys) {
+      if (!(key in patch)) continue;
+      const val = (patch as any)[key];
+      if (typeof val !== 'boolean') {
+        throw new BadRequestException(`Invalid value for ${String(key)} (expected boolean)`);
+      }
+      (out as any)[key] = val;
+    }
+    return out;
+  }
+
+  private resolveNotificationPrefsForRole(role: string, raw: unknown): NotificationPrefs {
+    const obj = raw && typeof raw === 'object' ? (raw as Record<string, unknown>) : {};
+
+    if (role === 'etudiant') {
+      return {
+        studentNewBooks: (obj.studentNewBooks as boolean | undefined) ?? true,
+        studentReservationAvailable: (obj.studentReservationAvailable as boolean | undefined) ?? true,
+        studentBorrowDueSoon: (obj.studentBorrowDueSoon as boolean | undefined) ?? true,
+      };
+    }
+
+    if (role === 'personnel') {
+      return {
+        personnelReservationAlerts: (obj.personnelReservationAlerts as boolean | undefined) ?? true,
+        personnelBorrowAlerts: (obj.personnelBorrowAlerts as boolean | undefined) ?? true,
+        personnelAuthorAdded: (obj.personnelAuthorAdded as boolean | undefined) ?? true,
+      };
+    }
+
+    // Other roles currently have no configurable in-app notification prefs.
+    return {};
+  }
+
+  async getMyNotificationPrefs(params: { sessionToken?: string; auth: AuthService }) {
+    const { sessionToken, auth } = params;
+    if (!sessionToken) throw new UnauthorizedException('Missing session');
+
+    const payload = await auth.verifyToken(sessionToken);
+    if (!payload.sub || payload.sub === 0) {
+      throw new ForbiddenException('Not allowed');
+    }
+
+    const user = await this.prisma.user.findUnique({
+      where: { id: payload.sub },
+      select: { role: true, notificationPrefs: true, status: true },
+    });
+
+    if (!user) throw new UnauthorizedException('Invalid session');
+    if (user.status === UserStatus.INACTIVE) throw new UnauthorizedException('Account is inactive');
+
+    return {
+      ok: true,
+      prefs: this.resolveNotificationPrefsForRole(user.role, (user as any).notificationPrefs),
+    };
+  }
+
+  async updateMyNotificationPrefs(params: {
+    sessionToken?: string;
+    auth: AuthService;
+    patch: Record<string, unknown>;
+  }) {
+    const { sessionToken, auth, patch } = params;
+    if (!sessionToken) throw new UnauthorizedException('Missing session');
+
+    const payload = await auth.verifyToken(sessionToken);
+    if (!payload.sub || payload.sub === 0) {
+      throw new ForbiddenException('Not allowed');
+    }
+
+    const user = await this.prisma.user.findUnique({
+      where: { id: payload.sub },
+      select: { role: true, notificationPrefs: true, status: true },
+    });
+    if (!user) throw new UnauthorizedException('Invalid session');
+    if (user.status === UserStatus.INACTIVE) throw new UnauthorizedException('Account is inactive');
+
+    const sanitized = this.sanitizeNotificationPrefsPatch(patch);
+    const current = ((user as any).notificationPrefs && typeof (user as any).notificationPrefs === 'object'
+      ? ((user as any).notificationPrefs as Record<string, unknown>)
+      : {}) as Record<string, unknown>;
+
+    const next = { ...current, ...sanitized };
+
+    const updated = await this.prisma.user.update({
+      where: { id: payload.sub },
+      data: { notificationPrefs: next as any },
+      select: { role: true, notificationPrefs: true },
+    });
+
+    return {
+      ok: true,
+      prefs: this.resolveNotificationPrefsForRole(updated.role, (updated as any).notificationPrefs),
+    };
   }
 }

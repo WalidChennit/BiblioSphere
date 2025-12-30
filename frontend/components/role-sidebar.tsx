@@ -1,9 +1,19 @@
 "use client"
 
 import type React from "react"
-import { useState } from "react"
+import { useEffect, useMemo, useState } from "react"
 import Link from "next/link"
 import { useRouter } from "next/navigation"
+import { apiFetch } from "@/lib/api"
+import { apiListNotifications, apiMarkNotificationRead, type NotificationItem } from "@/lib/notifications"
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuLabel,
+  DropdownMenuSeparator,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu"
 import {
   BookOpen,
   Home,
@@ -36,6 +46,53 @@ interface RoleSidebarProps {
 export function RoleSidebar({ role, children }: RoleSidebarProps) {
   const [sidebarOpen, setSidebarOpen] = useState(true)
   const router = useRouter()
+
+  const [notificationsOpen, setNotificationsOpen] = useState(false)
+  const [notifications, setNotifications] = useState<NotificationItem[]>([])
+  const [unreadCount, setUnreadCount] = useState(0)
+
+  const showUnreadDot = useMemo(() => unreadCount > 0, [unreadCount])
+
+  const loadNotifications = async () => {
+    try {
+      const data = await apiListNotifications({ limit: 10 })
+      setNotifications(data.items)
+      setUnreadCount(data.unreadCount)
+    } catch {
+      // ignore
+    }
+  }
+
+  useEffect(() => {
+    loadNotifications()
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [])
+
+  useEffect(() => {
+    if (notificationsOpen) loadNotifications()
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [notificationsOpen])
+
+  const onNotificationClick = async (n: NotificationItem) => {
+    try {
+      if (!n.readAt) await apiMarkNotificationRead(n.id)
+    } catch {
+      // ignore
+    }
+    if (n.href) router.push(n.href)
+    setNotificationsOpen(false)
+    loadNotifications()
+  }
+
+  const logout = async () => {
+    try {
+      await apiFetch(`/auth/logout`, { method: "POST" })
+    } catch {
+      // ignore
+    }
+    router.replace("/login")
+    router.refresh()
+  }
 
   const getNavItems = (): NavItem[] => {
     switch (role) {
@@ -78,18 +135,6 @@ export function RoleSidebar({ role, children }: RoleSidebarProps) {
     }
   }
 
-  const getWelcomeMessage = (): string => {
-    switch (role) {
-      case "student":
-        return "Welcome back, Student"
-      case "personal":
-        return "Welcome, Librarian"
-      case "admin":
-        return "Welcome, Admin"
-      default:
-        return "Welcome"
-    }
-  }
 
   const getInitial = (): string => {
     switch (role) {
@@ -106,7 +151,6 @@ export function RoleSidebar({ role, children }: RoleSidebarProps) {
 
   const navItems = getNavItems()
   const settingsPath = getSettingsPath()
-  const welcomeMessage = getWelcomeMessage()
   const initial = getInitial()
 
   return (
@@ -156,7 +200,7 @@ export function RoleSidebar({ role, children }: RoleSidebarProps) {
             </button>
           </Link>
           <button
-            onClick={() => router.push("/")}
+            onClick={logout}
             className="w-full flex items-center gap-3 px-4 py-3 rounded-lg hover:bg-red-50 dark:hover:bg-red-900/20 transition-colors text-red-600 dark:text-red-400"
           >
             <LogOut className="w-5 h-5" />
@@ -168,13 +212,33 @@ export function RoleSidebar({ role, children }: RoleSidebarProps) {
       {/* Main Content Wrapper */}
       <div className={`flex-1 flex flex-col ${sidebarOpen ? "ml-64" : "ml-20"} transition-all duration-300`}>
         {/* Top Header */}
-        <header className="h-16 bg-white dark:bg-slate-900 border-b border-slate-200 dark:border-slate-800 flex items-center justify-between px-6 sticky top-0 z-40">
-          <h1 className="text-lg font-semibold text-slate-900 dark:text-white">{welcomeMessage}</h1>
+        <header className="h-16 bg-white dark:bg-slate-900 border-b border-slate-200 dark:border-slate-800 flex items-center justify-end px-6 sticky top-0 z-40">
           <div className="flex items-center gap-4">
-            <button className="p-2 hover:bg-slate-100 dark:hover:bg-slate-800 rounded-lg transition-colors relative">
-              <Bell className="w-5 h-5 text-slate-600 dark:text-slate-400" />
-              <span className="absolute top-1 right-1 w-2 h-2 bg-red-500 rounded-full"></span>
-            </button>
+            <DropdownMenu open={notificationsOpen} onOpenChange={setNotificationsOpen}>
+              <DropdownMenuTrigger asChild>
+                <button className="p-2 hover:bg-slate-100 dark:hover:bg-slate-800 rounded-lg transition-colors relative">
+                  <Bell className="w-5 h-5 text-slate-600 dark:text-slate-400" />
+                  {showUnreadDot && <span className="absolute top-1 right-1 w-2 h-2 bg-red-500 rounded-full"></span>}
+                </button>
+              </DropdownMenuTrigger>
+              <DropdownMenuContent align="end" className="w-80">
+                <DropdownMenuLabel>Notifications</DropdownMenuLabel>
+                <DropdownMenuSeparator />
+                {notifications.length === 0 ? (
+                  <DropdownMenuItem disabled>No notifications</DropdownMenuItem>
+                ) : (
+                  notifications.map((n) => (
+                    <DropdownMenuItem key={n.id} onSelect={() => onNotificationClick(n)} className="flex flex-col items-start gap-1">
+                      <div className="flex w-full items-center justify-between gap-2">
+                        <span className={n.readAt ? "text-sm font-medium" : "text-sm font-semibold"}>{n.title}</span>
+                        {!n.readAt && <span className="h-2 w-2 rounded-full bg-amber-500" />}
+                      </div>
+                      <span className="text-xs text-slate-600 dark:text-slate-400 line-clamp-2">{n.message}</span>
+                    </DropdownMenuItem>
+                  ))
+                )}
+              </DropdownMenuContent>
+            </DropdownMenu>
             <div className="w-10 h-10 rounded-full bg-gradient-to-br from-amber-400 to-orange-500 flex items-center justify-center text-white font-semibold">
               {initial}
             </div>

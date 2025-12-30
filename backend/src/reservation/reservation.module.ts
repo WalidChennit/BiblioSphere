@@ -2,8 +2,10 @@ import { Module } from '@nestjs/common';
 import { ReservationService } from './reservation.service';
 import { ReservationController } from './reservation.controller';
 import { PrismaService } from '../prisma/prisma.service';
+import { NotificationModule } from '../notification/notification.module';
 
 @Module({
+  imports: [NotificationModule],
   controllers: [ReservationController],
   providers: [ReservationService, PrismaService],
   exports: [ReservationService],

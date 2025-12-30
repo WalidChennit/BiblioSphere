@@ -8,7 +8,13 @@ import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { Settings, Bell, Lock, X, Eye, EyeOff } from "lucide-react"
-import { apiChangeMyPassword, apiMe, apiUpdateMe } from "@/lib/student"
+import {
+  apiChangeMyPassword,
+  apiGetMyNotificationPrefs,
+  apiMe,
+  apiUpdateMe,
+  apiUpdateMyNotificationPrefs,
+} from "@/lib/student"
 import { useTheme } from "@/components/ThemeProvider"
 
 export default function PersonalSettingsPage() {
@@ -30,11 +36,13 @@ export default function PersonalSettingsPage() {
   const [profileSuccess, setProfileSuccess] = useState(false)
 
   const [notifications, setNotifications] = useState({
-    emailAlerts: true,
-    smsAlerts: true,
-    overdueNotifications: true,
-    reservationNotifications: true,
+    personnelReservationAlerts: true,
+    personnelBorrowAlerts: true,
+    personnelAuthorAdded: true,
   })
+
+  const [savingNotifications, setSavingNotifications] = useState(false)
+  const [notificationError, setNotificationError] = useState<string>("")
 
   const [showPasswordModal, setShowPasswordModal] = useState(false)
   const [passwordData, setPasswordData] = useState({
@@ -64,6 +72,18 @@ export default function PersonalSettingsPage() {
           return
         }
         setSessionUser(me.user)
+
+        try {
+          const prefs = await apiGetMyNotificationPrefs()
+          if (cancelled) return
+          setNotifications({
+            personnelReservationAlerts: prefs.prefs.personnelReservationAlerts ?? true,
+            personnelBorrowAlerts: prefs.prefs.personnelBorrowAlerts ?? true,
+            personnelAuthorAdded: prefs.prefs.personnelAuthorAdded ?? true,
+          })
+        } catch {
+          // Keep defaults if prefs are not available
+        }
 
         const res = await fetch(`${process.env.NEXT_PUBLIC_API_BASE_URL || "http://localhost:3001"}/users`, {
           credentials: "include",
@@ -104,10 +124,29 @@ export default function PersonalSettingsPage() {
   }
 
   const handleNotificationChange = (key: string) => {
-    setNotifications({
-      ...notifications,
-      [key]: !notifications[key as keyof typeof notifications],
-    })
+    void (async () => {
+      setNotificationError("")
+      const next = {
+        ...notifications,
+        [key]: !notifications[key as keyof typeof notifications],
+      }
+      setNotifications(next)
+
+      try {
+        setSavingNotifications(true)
+        const res = await apiUpdateMyNotificationPrefs(next)
+        setNotifications({
+          personnelReservationAlerts: res.prefs.personnelReservationAlerts ?? true,
+          personnelBorrowAlerts: res.prefs.personnelBorrowAlerts ?? true,
+          personnelAuthorAdded: res.prefs.personnelAuthorAdded ?? true,
+        })
+      } catch (e) {
+        setNotifications(notifications)
+        setNotificationError(e instanceof Error ? e.message : "Failed to save notification settings")
+      } finally {
+        setSavingNotifications(false)
+      }
+    })()
   }
 
   const handlePasswordChange = (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -315,18 +354,26 @@ export default function PersonalSettingsPage() {
           <CardDescription>Configure your notification preferences</CardDescription>
         </CardHeader>
         <CardContent className="space-y-4">
+          {notificationError && (
+            <div className="p-3 bg-red-50 dark:bg-red-900/20 text-red-600 dark:text-red-400 rounded-md text-sm">
+              {notificationError}
+            </div>
+          )}
           {[
-            { key: "emailAlerts", label: "Email Alerts", description: "Receive important notifications via email" },
-            { key: "smsAlerts", label: "SMS Alerts", description: "Receive SMS notifications for urgent matters" },
             {
-              key: "overdueNotifications",
-              label: "Overdue Notifications",
-              description: "Get notified about overdue book returns",
+              key: "personnelReservationAlerts",
+              label: "Reservation alerts",
+              description: "Get notified when a student reserves a book, or a pickup deadline is reached",
             },
             {
-              key: "reservationNotifications",
-              label: "Reservation Notifications",
-              description: "Get notified when reserved books are ready",
+              key: "personnelBorrowAlerts",
+              label: "Borrow alerts",
+              description: "Get notified when a student borrows a book, or a borrow due date is reached",
+            },
+            {
+              key: "personnelAuthorAdded",
+              label: "New author alerts",
+              description: "Get notified when a new author is added",
             },
           ].map((item) => (
             <div
@@ -339,6 +386,7 @@ export default function PersonalSettingsPage() {
               </div>
               <button
                 onClick={() => handleNotificationChange(item.key)}
+                disabled={savingNotifications}
                 className={`relative inline-flex h-6 w-11 items-center rounded-full transition-colors ${
                   notifications[item.key as keyof typeof notifications]
                     ? "bg-amber-600 dark:bg-amber-500"

@@ -21,6 +21,16 @@ export class AuthController {
     private readonly prisma: PrismaService,
   ) {}
 
+  private getSessionCookieOptions() {
+    const isProd = process.env.NODE_ENV === 'production';
+    return {
+      httpOnly: true,
+      sameSite: isProd ? 'none' : 'lax',
+      secure: isProd,
+      path: '/',
+    } as const;
+  }
+
   @Post('login')
   async login(
     @Body() body: { email: string; password: string },
@@ -28,14 +38,9 @@ export class AuthController {
   ) {
     const { token, user } = await this.auth.login(body.email, body.password);
 
-    const isProd = process.env.NODE_ENV === 'production';
     res.cookie('session', token, {
-      httpOnly: true,
-      // Dev is plain HTTP, so SameSite=None would be rejected unless Secure=true.
-      // Keep cookie usable in local dev by using SameSite=Lax.
-      sameSite: isProd ? 'none' : 'lax',
-      secure: isProd,
-      path: '/',
+      ...this.getSessionCookieOptions(),
+      // 7 days
       maxAge: 7 * 24 * 60 * 60 * 1000,
     });
 
@@ -44,7 +49,7 @@ export class AuthController {
 
   @Post('logout')
   logout(@Res({ passthrough: true }) res: Response) {
-    res.clearCookie('session', { path: '/' });
+    res.clearCookie('session', this.getSessionCookieOptions());
     return { ok: true };
   }
 
@@ -62,7 +67,7 @@ export class AuthController {
         select: { status: true },
       });
       if (dbUser?.status === UserStatus.INACTIVE) {
-        res.clearCookie('session', { path: '/' });
+        res.clearCookie('session', this.getSessionCookieOptions());
         return { user: null };
       }
     }

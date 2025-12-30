@@ -2,10 +2,14 @@ import { BadRequestException, Injectable, NotFoundException } from '@nestjs/comm
 import { Prisma } from '@prisma/client';
 import { PrismaService } from '../prisma/prisma.service';
 import { CreateEmpruntDto } from './dto/create-emprunt.dto';
+import { NotificationService } from '../notification/notification.service';
 
 @Injectable()
 export class EmpruntService {
-  constructor(private prisma: PrismaService) {}
+  constructor(
+    private prisma: PrismaService,
+    private readonly notifications: NotificationService,
+  ) {}
 
   private validateReturnDateRules(currentDueDate: Date, newDueDate: Date, renouvellement: number) {
     const maxDaysByRenewal = [15, 10, 5];
@@ -38,7 +42,7 @@ export class EmpruntService {
 
     if (livre.stockDisponible <= 0) throw new BadRequestException('Aucun exemplaire disponible');
 
-    return this.prisma.$transaction(async (tx) => {
+    const created = await this.prisma.$transaction(async (tx) => {
       const now = new Date();
       // default initial due date: 15 days after borrow
       const due = new Date(now.getTime() + 15 * 24 * 60 * 60 * 1000);
@@ -51,6 +55,16 @@ export class EmpruntService {
       });
       return created;
     });
+
+    await this.notifications.createForAllUsersByRole('personnel', (userId) => ({
+      type: 'PERSONNEL_BORROW_CREATED',
+      title: 'New borrow',
+      message: `${user.prenom} ${user.nom} borrowed "${livre.titre}".`,
+      href: '/personal',
+      dedupeKey: `PERSONNEL_BORROW_CREATED:${created.id}:${userId}`,
+    }));
+
+    return created;
   }
 
   async returnEmprunt(empruntId: number) {

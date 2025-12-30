@@ -7,7 +7,7 @@ import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { Settings, Bell, Lock, X, Eye, EyeOff } from "lucide-react"
-import { apiChangeMyPassword, apiMe, apiUpdateMe } from "@/lib/student"
+import { apiChangeMyPassword, apiGetMyNotificationPrefs, apiMe, apiUpdateMe, apiUpdateMyNotificationPrefs } from "@/lib/student"
 import { useTheme } from "@/components/ThemeProvider"
 
 export default function StudentSettingsPage() {
@@ -30,11 +30,13 @@ export default function StudentSettingsPage() {
   const [profileSuccess, setProfileSuccess] = useState(false)
 
   const [notifications, setNotifications] = useState({
-    emailAlerts: true,
-    smsAlerts: true,
-    dueDateReminders: true,
-    reservationNotifications: true,
+    studentNewBooks: true,
+    studentReservationAvailable: true,
+    studentBorrowDueSoon: true,
   })
+
+  const [savingNotifications, setSavingNotifications] = useState(false)
+  const [notificationError, setNotificationError] = useState<string>("")
 
   const [showPasswordModal, setShowPasswordModal] = useState(false)
   const [passwordData, setPasswordData] = useState({
@@ -70,6 +72,18 @@ export default function StudentSettingsPage() {
         }
 
         setSessionUser(me.user)
+
+        try {
+          const prefs = await apiGetMyNotificationPrefs()
+          if (cancelled) return
+          setNotifications({
+            studentNewBooks: prefs.prefs.studentNewBooks ?? true,
+            studentReservationAvailable: prefs.prefs.studentReservationAvailable ?? true,
+            studentBorrowDueSoon: prefs.prefs.studentBorrowDueSoon ?? true,
+          })
+        } catch {
+          // Keep defaults if prefs are not available
+        }
 
         // Fetch full profile using the existing users listing (no dedicated endpoint yet)
         const res = await fetch(`${process.env.NEXT_PUBLIC_API_BASE_URL || "http://localhost:3001"}/users`, {
@@ -150,10 +164,29 @@ export default function StudentSettingsPage() {
   }
 
   const handleNotificationChange = (key: string) => {
-    setNotifications({
-      ...notifications,
-      [key]: !notifications[key as keyof typeof notifications],
-    })
+    void (async () => {
+      setNotificationError("")
+      const next = {
+        ...notifications,
+        [key]: !notifications[key as keyof typeof notifications],
+      }
+      setNotifications(next)
+
+      try {
+        setSavingNotifications(true)
+        const res = await apiUpdateMyNotificationPrefs(next)
+        setNotifications({
+          studentNewBooks: res.prefs.studentNewBooks ?? true,
+          studentReservationAvailable: res.prefs.studentReservationAvailable ?? true,
+          studentBorrowDueSoon: res.prefs.studentBorrowDueSoon ?? true,
+        })
+      } catch (e) {
+        setNotifications(notifications)
+        setNotificationError(e instanceof Error ? e.message : "Failed to save notification settings")
+      } finally {
+        setSavingNotifications(false)
+      }
+    })()
   }
 
   const handlePasswordChange = (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -345,18 +378,26 @@ export default function StudentSettingsPage() {
           <CardDescription>Configure your notification preferences</CardDescription>
         </CardHeader>
         <CardContent className="space-y-4">
+          {notificationError && (
+            <div className="p-3 bg-red-50 dark:bg-red-900/20 text-red-600 dark:text-red-400 rounded-md text-sm">
+              {notificationError}
+            </div>
+          )}
           {[
-            { key: "emailAlerts", label: "Email Alerts", description: "Receive important notifications via email" },
-            { key: "smsAlerts", label: "SMS Alerts", description: "Receive SMS notifications for urgent matters" },
             {
-              key: "dueDateReminders",
-              label: "Due Date Reminders",
-              description: "Get reminded before books are due for return",
+              key: "studentNewBooks",
+              label: "New book alerts",
+              description: "Get notified when new books are added",
             },
             {
-              key: "reservationNotifications",
-              label: "Reservation Notifications",
-              description: "Get notified when reserved books are ready for pickup",
+              key: "studentReservationAvailable",
+              label: "Reservation available",
+              description: "Get notified when a reserved book is ready for pickup",
+            },
+            {
+              key: "studentBorrowDueSoon",
+              label: "Due date reminder",
+              description: "Get notified 1 day before a borrow is due",
             },
           ].map((item) => (
             <div
@@ -369,6 +410,7 @@ export default function StudentSettingsPage() {
               </div>
               <button
                 onClick={() => handleNotificationChange(item.key)}
+                disabled={savingNotifications}
                 className={`relative inline-flex h-6 w-11 items-center rounded-full transition-colors ${
                   notifications[item.key as keyof typeof notifications]
                     ? "bg-amber-600 dark:bg-amber-500"

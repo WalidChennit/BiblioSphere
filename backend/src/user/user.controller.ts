@@ -65,4 +65,21 @@ export class UserController {
     const token = req.cookies?.session;
     return this.userService.changeMyPassword({ sessionToken: token, auth: this.auth, ...body });
   }
+
+  @Get('me/notification-prefs')
+  @ApiOperation({ summary: 'Récupérer mes préférences de notifications (in-app)' })
+  async myNotificationPrefs(@Req() req: Request) {
+    const token = req.cookies?.session;
+    return this.userService.getMyNotificationPrefs({ sessionToken: token, auth: this.auth });
+  }
+
+  @Patch('me/notification-prefs')
+  @ApiOperation({ summary: 'Mettre à jour mes préférences de notifications (in-app)' })
+  async updateMyNotificationPrefs(
+    @Body() body: Record<string, unknown>,
+    @Req() req: Request,
+  ) {
+    const token = req.cookies?.session;
+    return this.userService.updateMyNotificationPrefs({ sessionToken: token, auth: this.auth, patch: body });
+  }
 }

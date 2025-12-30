@@ -2,10 +2,14 @@ import { Injectable, BadRequestException, NotFoundException } from '@nestjs/comm
 import { PrismaService } from '../prisma/prisma.service';
 import { CreateBookDto } from './dto/create-book.dto';
 import { UpdateBookDto } from './dto/update-book.dto';
+import { NotificationService } from '../notification/notification.service';
 
 @Injectable()
 export class BookService {
-  constructor(private prisma: PrismaService) {}
+  constructor(
+    private prisma: PrismaService,
+    private readonly notifications: NotificationService,
+  ) {}
 
   // ✅ CREATE LIVRE COMPLET
   async create(dto: CreateBookDto) {
@@ -41,6 +45,26 @@ export class BookService {
       },
       include: { category: true, editor: true, auteurs: { include: { author: true } } },
     });
+
+    // Notifications
+    await this.notifications.createForAllUsersByRole('etudiant', (userId) => ({
+      type: 'STUDENT_BOOK_ADDED',
+      title: 'New book added',
+      message: `A new book has been added: "${livre.titre}".`,
+      href: '/student/discover',
+      dedupeKey: `STUDENT_BOOK_ADDED:${livre.id}:${userId}`,
+    }));
+
+    await this.notifications.create(
+      { kind: 'role', role: 'admin' },
+      {
+        type: 'ADMIN_BOOK_ADDED',
+        title: 'New book added',
+        message: `A new book has been added: "${livre.titre}".`,
+        href: '/admin/catalogue',
+        dedupeKey: `ADMIN_BOOK_ADDED:${livre.id}`,
+      },
+    );
 
     // Si des réservations en attente existent déjà pour ce livre,
     // on les convertit en 'disponible' tant qu'il reste du stockDisponible

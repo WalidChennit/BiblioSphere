@@ -1,10 +1,14 @@
 import { BadRequestException, Injectable, NotFoundException } from '@nestjs/common';
 import { PrismaService } from '../prisma/prisma.service';
 import { CreateReservationDto } from './dto/create-reservation.dto';
+import { NotificationService } from '../notification/notification.service';
 
 @Injectable()
 export class ReservationService {
-  constructor(private prisma: PrismaService) {}
+  constructor(
+    private prisma: PrismaService,
+    private readonly notifications: NotificationService,
+  ) {}
 
   private buildInitialBorrowDueDate(now: Date) {
     return new Date(now.getTime() + 15 * 24 * 60 * 60 * 1000);
@@ -37,7 +41,7 @@ export class ReservationService {
       throw new BadRequestException('dateReservationDue doit être après dateReservation');
     }
 
-    return this.prisma.$transaction(async (tx) => {
+    const created = await this.prisma.$transaction(async (tx) => {
       if (livre.stockDisponible > 0) {
         // Réservation prête (stock dispo) mais reste une réservation jusqu'au pickup
         const res = await tx.reservation.create({
@@ -70,6 +74,16 @@ export class ReservationService {
       // queue position calculated outside tx for simplicity
       return res;
     });
+
+    await this.notifications.createForAllUsersByRole('personnel', (userId) => ({
+      type: 'PERSONNEL_RESERVATION_CREATED',
+      title: 'New reservation',
+      message: `${user.prenom} ${user.nom} reserved "${livre.titre}".`,
+      href: '/personal/reservations',
+      dedupeKey: `PERSONNEL_RESERVATION_CREATED:${(created as any).id}:${userId}`,
+    }));
+
+    return created;
   }
 
   async createWithQueue(dto: CreateReservationDto) {
@@ -153,6 +167,15 @@ export class ReservationService {
           renouvellement: 0,
         },
       });
+
+      const pickupUser = await tx.user.findUnique({ where: { id: res.userId }, select: { prenom: true, nom: true } });
+      await this.notifications.createForAllUsersByRole('personnel', (userId) => ({
+        type: 'PERSONNEL_BORROW_CREATED',
+        title: 'New borrow',
+        message: `${pickupUser?.prenom ?? 'A student'} ${pickupUser?.nom ?? ''} borrowed "${livre.titre}" (pickup).`,
+        href: '/personal',
+        dedupeKey: `PERSONNEL_BORROW_CREATED:${emprunt.id}:${userId}`,
+      }));
 
       // Delete reservation; if another concurrent request deleted it, we treat pickup as idempotent.
       await tx.reservation.deleteMany({ where: { id: reservationId } });

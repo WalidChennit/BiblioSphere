@@ -148,3 +148,33 @@ export async function apiStudentStats(userId: number) {
   if (!res.ok) throw new Error(await res.text())
   return (await res.json()) as StudentStatsResponse
 }
+
+export type NotificationPrefs = {
+  // Student
+  studentNewBooks?: boolean
+  studentReservationAvailable?: boolean
+  studentBorrowDueSoon?: boolean
+
+  // Personnel
+  personnelReservationAlerts?: boolean
+  personnelBorrowAlerts?: boolean
+  personnelAuthorAdded?: boolean
+}
+
+export async function apiGetMyNotificationPrefs(): Promise<{ ok: true; prefs: NotificationPrefs }> {
+  const res = await apiFetch("/users/me/notification-prefs", { cache: "no-store" })
+  if (!res.ok) throw new Error(await res.text())
+  return (await res.json()) as { ok: true; prefs: NotificationPrefs }
+}
+
+export async function apiUpdateMyNotificationPrefs(
+  patch: NotificationPrefs,
+): Promise<{ ok: true; prefs: NotificationPrefs }> {
+  const res = await apiFetch("/users/me/notification-prefs", {
+    method: "PATCH",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(patch),
+  })
+  if (!res.ok) throw new Error(await res.text())
+  return (await res.json()) as { ok: true; prefs: NotificationPrefs }
+}
