@@ -1,13 +1,25 @@
-import { Controller, Post, Body, Get, Param, Patch, Delete } from '@nestjs/common';
+import { Controller, Post, Body, Get, Param, Patch, Delete, Req, ForbiddenException, UnauthorizedException } from '@nestjs/common';
 import { BookService } from './book.service';
 import { CreateBookDto } from './dto/create-book.dto';
 import { UpdateBookDto } from './dto/update-book.dto';
 import { ApiTags, ApiOperation, ApiParam } from '@nestjs/swagger';
+import type { Request } from 'express';
+import { AuthService } from '../auth/auth.service';
 
 @ApiTags('Livres')
 @Controller('livres')
 export class BookController {
-  constructor(private readonly bookService: BookService) {}
+  constructor(
+    private readonly bookService: BookService,
+    private readonly auth: AuthService,
+  ) {}
+
+  private async requireAdmin(req: Request) {
+    const token = req.cookies?.session;
+    if (!token) throw new UnauthorizedException('Missing session');
+    const payload = await this.auth.verifyToken(token);
+    if (payload.role !== 'admin') throw new ForbiddenException('Admin only');
+  }
 
   @Post()
   @ApiOperation({ summary: 'Créer un livre complet' })
@@ -36,7 +48,8 @@ export class BookController {
 
   @Delete(':id')
   @ApiOperation({ summary: 'Supprimer un livre (aucun emprunt/réservation en cours)' })
-  remove(@Param('id') id: string) {
+  async remove(@Param('id') id: string, @Req() req: Request) {
+    await this.requireAdmin(req);
     return this.bookService.remove(Number(id));
   }
 }

@@ -1,13 +1,25 @@
-import { Controller, Post, Get, Patch, Delete, Param, Body } from '@nestjs/common';
+import { Controller, Post, Get, Patch, Delete, Param, Body, Req, ForbiddenException, UnauthorizedException } from '@nestjs/common';
 import { AuthorService } from './author.service';
 import { CreateAuthorDto } from './dto/create-author.dto';
 import { UpdateAuthorDto } from './dto/update-author.dto';
 import { ApiTags, ApiOperation, ApiParam } from '@nestjs/swagger';
+import type { Request } from 'express';
+import { AuthService } from '../auth/auth.service';
 
 @ApiTags('Authors')
 @Controller('authors')
 export class AuthorController {
-  constructor(private readonly authorService: AuthorService) {}
+  constructor(
+    private readonly authorService: AuthorService,
+    private readonly auth: AuthService,
+  ) {}
+
+  private async requireAdmin(req: Request) {
+    const token = req.cookies?.session;
+    if (!token) throw new UnauthorizedException('Missing session');
+    const payload = await this.auth.verifyToken(token);
+    if (payload.role !== 'admin') throw new ForbiddenException('Admin only');
+  }
 
   @Post()
   @ApiOperation({ summary: 'Créer un auteur (nom + prénom)' })
@@ -36,7 +48,8 @@ export class AuthorController {
 
   @Delete(':id')
   @ApiOperation({ summary: 'Supprimer un auteur sans livre' })
-  remove(@Param('id') id: string) {
+  async remove(@Param('id') id: string, @Req() req: Request) {
+    await this.requireAdmin(req);
     return this.authorService.remove(Number(id));
   }
 }

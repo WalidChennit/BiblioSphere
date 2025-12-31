@@ -53,6 +53,9 @@ export default function AdminCataloguePage() {
   const [newCategoryName, setNewCategoryName] = useState("")
   const [creatingCategory, setCreatingCategory] = useState(false)
 
+  const [deletingCategoryId, setDeletingCategoryId] = useState<number | null>(null)
+  const [deletingBookId, setDeletingBookId] = useState<number | null>(null)
+
   const [categorySearch, setCategorySearch] = useState("")
 
   // Filters
@@ -105,6 +108,40 @@ export default function AdminCataloguePage() {
       setError(e instanceof Error ? e.message : "Failed to create category")
     } finally {
       setCreatingCategory(false)
+    }
+  }
+
+  const deleteCategory = async (id: number) => {
+    setError("")
+    if (!confirm("Delete this category?")) return
+
+    setDeletingCategoryId(id)
+    try {
+      const res = await apiFetch(`/categories/${id}`, { method: "DELETE" })
+      if (!res.ok) throw new Error((await parseErrorMessage(res)) || "Failed to delete category")
+      await loadAll()
+      setTab("categories")
+    } catch (e) {
+      setError(e instanceof Error ? e.message : "Failed to delete category")
+    } finally {
+      setDeletingCategoryId(null)
+    }
+  }
+
+  const deleteBook = async (id: number) => {
+    setError("")
+    if (!confirm("Delete this book?")) return
+
+    setDeletingBookId(id)
+    try {
+      const res = await apiFetch(`/livres/${id}`, { method: "DELETE" })
+      if (!res.ok) throw new Error((await parseErrorMessage(res)) || "Failed to delete book")
+      await loadAll()
+      setTab("books")
+    } catch (e) {
+      setError(e instanceof Error ? e.message : "Failed to delete book")
+    } finally {
+      setDeletingBookId(null)
     }
   }
 
@@ -186,18 +223,29 @@ export default function AdminCataloguePage() {
                     <tr className="border-b border-slate-200 dark:border-slate-800">
                       <th className="text-left py-3 px-4 font-semibold">ID</th>
                       <th className="text-left py-3 px-4 font-semibold">Name</th>
+                      <th className="text-right py-3 px-4 font-semibold">Actions</th>
                     </tr>
                   </thead>
                   <tbody>
                     {loading ? (
                       <tr>
-                        <td colSpan={2} className="py-6 px-4 text-slate-500">Loading...</td>
+                        <td colSpan={3} className="py-6 px-4 text-slate-500">Loading...</td>
                       </tr>
                     ) : (
                       filteredCategories.map((c) => (
                         <tr key={c.id} className="border-b border-slate-200 dark:border-slate-800">
                           <td className="py-3 px-4">{c.id}</td>
                           <td className="py-3 px-4 font-medium">{c.name}</td>
+                          <td className="py-3 px-4 text-right">
+                            <Button
+                              variant="outline"
+                              className="text-red-600 border-red-200 hover:bg-red-50 dark:hover:bg-red-900/20"
+                              disabled={deletingCategoryId === c.id}
+                              onClick={() => void deleteCategory(c.id)}
+                            >
+                              {deletingCategoryId === c.id ? "Deleting..." : "Delete"}
+                            </Button>
+                          </td>
                         </tr>
                       ))
                     )}
@@ -258,12 +306,13 @@ export default function AdminCataloguePage() {
                         <th className="text-left py-3 px-4 font-semibold">Category</th>
                         <th className="text-left py-3 px-4 font-semibold">Editor</th>
                         <th className="text-left py-3 px-4 font-semibold">Authors</th>
+                        <th className="text-right py-3 px-4 font-semibold">Actions</th>
                       </tr>
                     </thead>
                     <tbody>
                       {loading ? (
                         <tr>
-                          <td colSpan={6} className="py-6 px-4 text-slate-500">Loading...</td>
+                          <td colSpan={7} className="py-6 px-4 text-slate-500">Loading...</td>
                         </tr>
                       ) : (
                         filteredBooks.map((b) => (
@@ -278,6 +327,16 @@ export default function AdminCataloguePage() {
                                 .map((x) => `${x.author?.prenom || ""} ${x.author?.nom || ""}`.trim())
                                 .filter(Boolean)
                                 .join(", ") || "—"}
+                            </td>
+                            <td className="py-3 px-4 text-right">
+                              <Button
+                                variant="outline"
+                                className="text-red-600 border-red-200 hover:bg-red-50 dark:hover:bg-red-900/20"
+                                disabled={deletingBookId === b.id}
+                                onClick={() => void deleteBook(b.id)}
+                              >
+                                {deletingBookId === b.id ? "Deleting..." : "Delete"}
+                              </Button>
                             </td>
                           </tr>
                         ))

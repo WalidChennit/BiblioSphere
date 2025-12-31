@@ -3,7 +3,7 @@
 import { useEffect, useMemo, useState } from "react"
 import Link from "next/link"
 import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, LineChart, Line } from "recharts"
-import { BookOpen, BookMarked, LogOut, Settings, TrendingUp, Users } from "lucide-react"
+import { BookOpen, BookMarked, LogOut, Settings, TrendingUp, Users, Printer } from "lucide-react"
 
 import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
@@ -101,8 +101,33 @@ export default function AdminDashboard() {
     window.location.href = "/login"
   }
 
+  const printDashboard = () => {
+    try {
+      const root = document.documentElement
+      const hadDark = root.classList.contains("dark")
+      if (hadDark) root.classList.remove("dark")
+
+      const restore = () => {
+        if (hadDark) root.classList.add("dark")
+        window.removeEventListener("afterprint", restore)
+      }
+
+      window.addEventListener("afterprint", restore)
+
+      // Give responsive charts a chance to measure/reflow before printing.
+      window.dispatchEvent(new Event("resize"))
+      requestAnimationFrame(() => {
+        requestAnimationFrame(() => {
+          setTimeout(() => window.print(), 50)
+        })
+      })
+    } catch {
+      // ignore
+    }
+  }
+
   return (
-    <div className="min-h-screen bg-slate-50 dark:bg-slate-950">
+    <div className="print-dashboard min-h-screen bg-slate-50 dark:bg-slate-950">
       <main className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
         <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-4 mb-8">
           <div>
@@ -113,7 +138,11 @@ export default function AdminDashboard() {
           </div>
 
           <div className="flex items-center gap-3">
-            <div className="relative">
+            <Button variant="outline" className="no-print" onClick={printDashboard}>
+              <Printer className="h-4 w-4 mr-2" />
+              Print / Save PDF
+            </Button>
+            <div className="relative no-print">
               <select
                 value={selectedPeriod}
                 onChange={(e) => setSelectedPeriod(e.target.value)}
@@ -129,7 +158,7 @@ export default function AdminDashboard() {
           </div>
         </div>
 
-        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6 mb-8">
+        <div className="print-kpis grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6 mb-8">
           <Card className="border-0 shadow-sm">
             <CardHeader className="flex flex-row items-center justify-between pb-2">
               <CardTitle className="text-sm font-medium text-slate-600 dark:text-slate-400">Total Users</CardTitle>
@@ -205,14 +234,14 @@ export default function AdminDashboard() {
           </div>
         ) : null}
 
-        <div className="grid grid-cols-1 lg:grid-cols-2 gap-8">
+        <div className="print-charts grid grid-cols-1 lg:grid-cols-2 gap-8">
           <Card className="border-0 shadow-sm">
             <CardHeader>
               <CardTitle>Users Growth</CardTitle>
               <CardDescription>New user registrations over time</CardDescription>
             </CardHeader>
             <CardContent>
-              <div className="h-80 min-h-[320px] min-w-0">
+              <div className="print-chart h-80 min-h-[320px] min-w-0">
                 <ClientOnly>
                   <ResponsiveContainer width="100%" height="100%">
                     <LineChart data={dashboardData}>
@@ -234,7 +263,7 @@ export default function AdminDashboard() {
               <CardDescription>New books added to catalog</CardDescription>
             </CardHeader>
             <CardContent>
-              <div className="h-80 min-h-[320px] min-w-0">
+              <div className="print-chart h-80 min-h-[320px] min-w-0">
                 <ClientOnly>
                   <ResponsiveContainer width="100%" height="100%">
                     <BarChart data={dashboardData}>

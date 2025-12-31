@@ -123,3 +123,96 @@
     @apply bg-background text-foreground;
   }
 }
+
+@media print {
+  .print-dashboard aside,
+  .print-dashboard header,
+  .no-print {
+    display: none !important;
+  }
+
+  @page {
+    size: A4;
+    margin: 12mm;
+  }
+
+  html,
+  body {
+    background: white !important;
+    color: #111827 !important;
+    -webkit-print-color-adjust: exact;
+    print-color-adjust: exact;
+  }
+
+  /* Ensure the dashboard itself doesn't print with tinted backgrounds */
+  .print-dashboard {
+    background: white !important;
+  }
+
+  /* Use full width on paper */
+  .print-dashboard main {
+    max-width: none !important;
+    padding: 0 !important;
+  }
+
+  /* Cards: keep content together and remove shadows for clarity */
+  .print-dashboard [class*="shadow"] {
+    box-shadow: none !important;
+  }
+
+  .print-dashboard [class*="grid"] > * {
+    break-inside: avoid;
+    page-break-inside: avoid;
+  }
+
+  /* Layout: make placement predictable on paper */
+  .print-dashboard .print-kpis {
+    grid-template-columns: repeat(2, minmax(0, 1fr)) !important;
+    gap: 12px !important;
+  }
+
+  .print-dashboard .print-charts {
+    grid-template-columns: 1fr !important;
+    gap: 14px !important;
+  }
+
+  /* Charts: ensure they are large enough and not clipped */
+  .print-dashboard .print-chart {
+    height: 260px !important;
+    min-height: 260px !important;
+  }
+
+  /* Slightly tighten common tailwind spacing utilities on paper */
+  .print-dashboard .mb-8 {
+    margin-bottom: 14px !important;
+  }
+
+  .print-dashboard .py-8 {
+    padding-top: 0 !important;
+    padding-bottom: 0 !important;
+  }
+
+  /* Recharts readability tweaks (axes + grid + labels) */
+  .print-dashboard .recharts-wrapper,
+  .print-dashboard .recharts-surface {
+    overflow: visible !important;
+  }
+
+  .print-dashboard .recharts-cartesian-axis line,
+  .print-dashboard .recharts-cartesian-grid line {
+    stroke: #9ca3af !important;
+  }
+
+  .print-dashboard .recharts-text,
+  .print-dashboard .recharts-cartesian-axis-tick-value {
+    fill: #111827 !important;
+  }
+
+  .print-dashboard .recharts-text {
+    font-size: 12px !important;
+  }
+
+  .print-dashboard .recharts-tooltip-wrapper {
+    display: none !important;
+  }
+}

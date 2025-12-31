@@ -1,12 +1,24 @@
-import { Controller, Post, Body, Get, Delete, Param } from '@nestjs/common';
+import { Controller, Post, Body, Get, Delete, Param, Req, ForbiddenException, UnauthorizedException } from '@nestjs/common';
 import { CategoryService } from './category.service';
 import { CreateCategoryDto } from './dto/create-category.dto';
 import { ApiTags, ApiOperation, ApiResponse, ApiParam } from '@nestjs/swagger';
+import type { Request } from 'express';
+import { AuthService } from '../auth/auth.service';
 
 @ApiTags('Categories')
 @Controller('categories')
 export class CategoryController {
-  constructor(private readonly categoryService: CategoryService) {}
+  constructor(
+    private readonly categoryService: CategoryService,
+    private readonly auth: AuthService,
+  ) {}
+
+  private async requireAdmin(req: Request) {
+    const token = req.cookies?.session;
+    if (!token) throw new UnauthorizedException('Missing session');
+    const payload = await this.auth.verifyToken(token);
+    if (payload.role !== 'admin') throw new ForbiddenException('Admin only');
+  }
 
   // ✅ CREATE
   @Post()
@@ -33,7 +45,8 @@ export class CategoryController {
     status: 400,
     description: 'Suppression impossible : livres associés',
   })
-  remove(@Param('id') id: string) {
+  async remove(@Param('id') id: string, @Req() req: Request) {
+    await this.requireAdmin(req);
     return this.categoryService.remove(Number(id));
   }
 }

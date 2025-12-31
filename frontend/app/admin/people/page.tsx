@@ -44,6 +44,9 @@ export default function AdminPeoplePage() {
   const [editorName, setEditorName] = useState("")
   const [creatingEditor, setCreatingEditor] = useState(false)
 
+  const [deletingAuthorId, setDeletingAuthorId] = useState<number | null>(null)
+  const [deletingEditorId, setDeletingEditorId] = useState<number | null>(null)
+
   const [editorSearch, setEditorSearch] = useState("")
 
   const loadAll = async () => {
@@ -117,6 +120,40 @@ export default function AdminPeoplePage() {
     }
   }
 
+  const deleteAuthor = async (id: number) => {
+    setError("")
+    if (!confirm("Delete this author?")) return
+
+    setDeletingAuthorId(id)
+    try {
+      const res = await apiFetch(`/authors/${id}`, { method: "DELETE" })
+      if (!res.ok) throw new Error((await parseErrorMessage(res)) || "Failed to delete author")
+      await loadAll()
+      setTab("authors")
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Failed to delete author")
+    } finally {
+      setDeletingAuthorId(null)
+    }
+  }
+
+  const deleteEditor = async (id: number) => {
+    setError("")
+    if (!confirm("Delete this editor?")) return
+
+    setDeletingEditorId(id)
+    try {
+      const res = await apiFetch(`/editors/${id}`, { method: "DELETE" })
+      if (!res.ok) throw new Error((await parseErrorMessage(res)) || "Failed to delete editor")
+      await loadAll()
+      setTab("editors")
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Failed to delete editor")
+    } finally {
+      setDeletingEditorId(null)
+    }
+  }
+
   const filteredAuthors = authors.filter((a) => {
     const q = authorSearch.trim().toLowerCase()
     if (!q) return true
@@ -181,12 +218,13 @@ export default function AdminPeoplePage() {
                       <th className="text-left py-3 px-4 font-semibold">ID</th>
                       <th className="text-left py-3 px-4 font-semibold">First name</th>
                       <th className="text-left py-3 px-4 font-semibold">Last name</th>
+                      <th className="text-right py-3 px-4 font-semibold">Actions</th>
                     </tr>
                   </thead>
                   <tbody>
                     {loading ? (
                       <tr>
-                        <td colSpan={3} className="py-6 px-4 text-slate-500">Loading...</td>
+                        <td colSpan={4} className="py-6 px-4 text-slate-500">Loading...</td>
                       </tr>
                     ) : (
                       filteredAuthors.map((a) => (
@@ -194,6 +232,16 @@ export default function AdminPeoplePage() {
                           <td className="py-3 px-4">{a.id}</td>
                           <td className="py-3 px-4 font-medium">{a.prenom}</td>
                           <td className="py-3 px-4 font-medium">{a.nom}</td>
+                          <td className="py-3 px-4 text-right">
+                            <Button
+                              variant="outline"
+                              className="text-red-600 border-red-200 hover:bg-red-50 dark:hover:bg-red-900/20"
+                              disabled={deletingAuthorId === a.id}
+                              onClick={() => void deleteAuthor(a.id)}
+                            >
+                              {deletingAuthorId === a.id ? "Deleting..." : "Delete"}
+                            </Button>
+                          </td>
                         </tr>
                       ))
                     )}
@@ -230,18 +278,29 @@ export default function AdminPeoplePage() {
                     <tr className="border-b border-slate-200 dark:border-slate-800">
                       <th className="text-left py-3 px-4 font-semibold">ID</th>
                       <th className="text-left py-3 px-4 font-semibold">Name</th>
+                      <th className="text-right py-3 px-4 font-semibold">Actions</th>
                     </tr>
                   </thead>
                   <tbody>
                     {loading ? (
                       <tr>
-                        <td colSpan={2} className="py-6 px-4 text-slate-500">Loading...</td>
+                        <td colSpan={3} className="py-6 px-4 text-slate-500">Loading...</td>
                       </tr>
                     ) : (
                       filteredEditors.map((e) => (
                         <tr key={e.id} className="border-b border-slate-200 dark:border-slate-800">
                           <td className="py-3 px-4">{e.id}</td>
                           <td className="py-3 px-4 font-medium">{e.name}</td>
+                          <td className="py-3 px-4 text-right">
+                            <Button
+                              variant="outline"
+                              className="text-red-600 border-red-200 hover:bg-red-50 dark:hover:bg-red-900/20"
+                              disabled={deletingEditorId === e.id}
+                              onClick={() => void deleteEditor(e.id)}
+                            >
+                              {deletingEditorId === e.id ? "Deleting..." : "Delete"}
+                            </Button>
+                          </td>
                         </tr>
                       ))
                     )}
