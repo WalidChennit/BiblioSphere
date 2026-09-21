@@ -6,6 +6,7 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/com
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
 import { AlertCircle, Clock, XCircle } from "lucide-react"
+import { ListPagination, PAGE_SIZE } from "@/components/list-pagination"
 
 type Reservation = {
   id: number
@@ -34,6 +35,7 @@ export default function ReservationsPage() {
   const [error, setError] = useState<string | null>(null)
   const [message, setMessage] = useState<string | null>(null)
   const [didAutoPickup, setDidAutoPickup] = useState(false)
+  const [page, setPage] = useState(1)
 
   const refresh = async () => {
     setLoading(true)
@@ -90,6 +92,13 @@ export default function ReservationsPage() {
       return true
     })
   }, [items])
+
+  const sortedVisible = useMemo(
+    () => visible.slice().sort((a, b) => new Date(b.dateReservation).getTime() - new Date(a.dateReservation).getTime()),
+    [visible],
+  )
+  const totalPages = Math.max(1, Math.ceil(sortedVisible.length / PAGE_SIZE))
+  const paginatedVisible = sortedVisible.slice((page - 1) * PAGE_SIZE, page * PAGE_SIZE)
 
   const onCancel = async (id: number) => {
     setActingId(id)
@@ -175,10 +184,7 @@ export default function ReservationsPage() {
           {visible.length === 0 && !loading ? (
             <div className="text-sm text-slate-600 dark:text-slate-400">No reservations yet.</div>
           ) : (
-            visible
-              .slice()
-              .sort((a, b) => new Date(b.dateReservation).getTime() - new Date(a.dateReservation).getTime())
-              .map((r) => (
+            paginatedVisible.map((r) => (
                 <div
                   key={r.id}
                   className="p-4 rounded-lg border border-slate-200 dark:border-slate-800 hover:bg-slate-50 dark:hover:bg-slate-900 transition-colors"
@@ -240,6 +246,8 @@ export default function ReservationsPage() {
                 </div>
               ))
           )}
+
+          <ListPagination page={page} totalPages={totalPages} onPageChange={setPage} />
         </CardContent>
       </Card>
     </div>

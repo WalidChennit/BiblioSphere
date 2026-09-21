@@ -6,6 +6,7 @@ import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { apiFetch } from "@/lib/api"
+import { ListPagination, PAGE_SIZE } from "@/components/list-pagination"
 
 type Author = { id: number; nom: string; prenom: string }
 
@@ -48,6 +49,9 @@ export default function AdminPeoplePage() {
   const [deletingEditorId, setDeletingEditorId] = useState<number | null>(null)
 
   const [editorSearch, setEditorSearch] = useState("")
+
+  const [authorPage, setAuthorPage] = useState(1)
+  const [editorPage, setEditorPage] = useState(1)
 
   const loadAll = async () => {
     setLoading(true)
@@ -167,6 +171,20 @@ export default function AdminPeoplePage() {
     return (e.name || "").toLowerCase().includes(q)
   })
 
+  useEffect(() => {
+    setAuthorPage(1)
+  }, [authorSearch])
+
+  useEffect(() => {
+    setEditorPage(1)
+  }, [editorSearch])
+
+  const authorTotalPages = Math.max(1, Math.ceil(filteredAuthors.length / PAGE_SIZE))
+  const paginatedAuthors = filteredAuthors.slice((authorPage - 1) * PAGE_SIZE, authorPage * PAGE_SIZE)
+
+  const editorTotalPages = Math.max(1, Math.ceil(filteredEditors.length / PAGE_SIZE))
+  const paginatedEditors = filteredEditors.slice((editorPage - 1) * PAGE_SIZE, editorPage * PAGE_SIZE)
+
   return (
     <div className="p-6 space-y-6">
       <Card className="border-0 shadow-sm">
@@ -227,7 +245,7 @@ export default function AdminPeoplePage() {
                         <td colSpan={4} className="py-6 px-4 text-slate-500">Loading...</td>
                       </tr>
                     ) : (
-                      filteredAuthors.map((a) => (
+                      paginatedAuthors.map((a) => (
                         <tr key={a.id} className="border-b border-slate-200 dark:border-slate-800">
                           <td className="py-3 px-4">{a.id}</td>
                           <td className="py-3 px-4 font-medium">{a.prenom}</td>
@@ -248,6 +266,8 @@ export default function AdminPeoplePage() {
                   </tbody>
                 </table>
               </div>
+
+              <ListPagination page={authorPage} totalPages={authorTotalPages} onPageChange={setAuthorPage} />
             </div>
           )}
 
@@ -287,7 +307,7 @@ export default function AdminPeoplePage() {
                         <td colSpan={3} className="py-6 px-4 text-slate-500">Loading...</td>
                       </tr>
                     ) : (
-                      filteredEditors.map((e) => (
+                      paginatedEditors.map((e) => (
                         <tr key={e.id} className="border-b border-slate-200 dark:border-slate-800">
                           <td className="py-3 px-4">{e.id}</td>
                           <td className="py-3 px-4 font-medium">{e.name}</td>
@@ -307,6 +327,8 @@ export default function AdminPeoplePage() {
                   </tbody>
                 </table>
               </div>
+
+              <ListPagination page={editorPage} totalPages={editorTotalPages} onPageChange={setEditorPage} />
             </div>
           )}
         </CardContent>

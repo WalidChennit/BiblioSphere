@@ -5,6 +5,7 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/com
 import { Button } from "@/components/ui/button"
 import { AlertTriangle, Mail, Phone } from "lucide-react"
 import { apiFetch } from "@/lib/api"
+import { ListPagination, PAGE_SIZE } from "@/components/list-pagination"
 
 export default function OverduesPage() {
   const [loading, setLoading] = useState(false)
@@ -12,6 +13,7 @@ export default function OverduesPage() {
   const [overdues, setOverdues] = useState<any[]>([])
   const [usersById, setUsersById] = useState<Map<number, any>>(new Map())
   const [actingId, setActingId] = useState<number | null>(null)
+  const [page, setPage] = useState(1)
 
   const load = async () => {
     setLoading(true)
@@ -95,6 +97,9 @@ export default function OverduesPage() {
     })
   }, [overdues, usersById])
 
+  const totalPages = Math.max(1, Math.ceil(items.length / PAGE_SIZE))
+  const paginatedItems = items.slice((page - 1) * PAGE_SIZE, page * PAGE_SIZE)
+
   return (
     <div className="p-6 space-y-6">
       <div>
@@ -123,7 +128,7 @@ export default function OverduesPage() {
 
       {/* Overdues List */}
       <div className="space-y-4">
-        {items.map((item) => (
+        {paginatedItems.map((item) => (
           <Card key={item.id} className="border-l-4 border-l-red-500">
             <CardContent className="pt-6">
               <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
@@ -190,6 +195,8 @@ export default function OverduesPage() {
           </Card>
         ))}
       </div>
+
+      <ListPagination page={page} totalPages={totalPages} onPageChange={setPage} />
     </div>
   )
 }

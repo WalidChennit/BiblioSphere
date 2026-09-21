@@ -6,6 +6,7 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/com
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
 import { AlertCircle, CheckCircle } from "lucide-react"
+import { ListPagination, PAGE_SIZE } from "@/components/list-pagination"
 
 type Emprunt = {
   id: number
@@ -35,6 +36,8 @@ export default function BorrowedPage() {
   const [error, setError] = useState<string | null>(null)
   const [message, setMessage] = useState<string | null>(null)
   const [draftReturnDateById, setDraftReturnDateById] = useState<Record<number, string>>({})
+  const [activePage, setActivePage] = useState(1)
+  const [overduePage, setOverduePage] = useState(1)
 
   const refresh = async () => {
     setLoading(true)
@@ -80,6 +83,12 @@ export default function BorrowedPage() {
       return Number.isFinite(dueMs) && dueMs < nowMs
     })
   }, [activeBorrowed])
+
+  const activeTotalPages = Math.max(1, Math.ceil(activeBorrowed.length / PAGE_SIZE))
+  const paginatedActiveBorrowed = activeBorrowed.slice((activePage - 1) * PAGE_SIZE, activePage * PAGE_SIZE)
+
+  const overdueTotalPages = Math.max(1, Math.ceil(overdue.length / PAGE_SIZE))
+  const paginatedOverdue = overdue.slice((overduePage - 1) * PAGE_SIZE, overduePage * PAGE_SIZE)
 
   const onReturn = async (empruntId: number) => {
     setActingId(empruntId)
@@ -214,7 +223,7 @@ export default function BorrowedPage() {
             <CardDescription>Books you currently have borrowed</CardDescription>
           </CardHeader>
           <CardContent className="space-y-3">
-            {activeBorrowed.map((emprunt) => (
+            {paginatedActiveBorrowed.map((emprunt) => (
               
               <div
                 key={emprunt.id}
@@ -316,6 +325,7 @@ export default function BorrowedPage() {
                 </div>
               </div>
             ))}
+            <ListPagination page={activePage} totalPages={activeTotalPages} onPageChange={setActivePage} />
           </CardContent>
         </Card>
       )}
@@ -331,7 +341,7 @@ export default function BorrowedPage() {
             <CardDescription>Books past their due date</CardDescription>
           </CardHeader>
           <CardContent className="space-y-3">
-            {overdue.map((emprunt) => (
+            {paginatedOverdue.map((emprunt) => (
               <div
                 key={emprunt.id}
                 className="p-4 rounded-lg border border-red-200 dark:border-red-900 bg-red-50/40 dark:bg-red-950/20"
@@ -352,6 +362,7 @@ export default function BorrowedPage() {
                 </div>
               </div>
             ))}
+            <ListPagination page={overduePage} totalPages={overdueTotalPages} onPageChange={setOverduePage} />
           </CardContent>
         </Card>
       )}

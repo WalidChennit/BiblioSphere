@@ -4,6 +4,7 @@ import { useEffect, useState } from "react"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
 import { Book } from "lucide-react"
+import { ListPagination, PAGE_SIZE } from "@/components/list-pagination"
 
 type Livre = {
   id: number
@@ -23,6 +24,7 @@ export default function PersonalBooksPage() {
   const [books, setBooks] = useState<Livre[]>([])
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState<string | null>(null)
+  const [page, setPage] = useState(1)
 
   const load = async () => {
     setLoading(true)
@@ -41,6 +43,9 @@ export default function PersonalBooksPage() {
   useEffect(() => {
     load().catch(() => {})
   }, [])
+
+  const totalPages = Math.max(1, Math.ceil(books.length / PAGE_SIZE))
+  const paginatedBooks = books.slice((page - 1) * PAGE_SIZE, page * PAGE_SIZE)
 
   return (
     <div className="p-6 space-y-6">
@@ -65,7 +70,7 @@ export default function PersonalBooksPage() {
         </CardHeader>
         <CardContent>
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-            {books.map((b) => (
+            {paginatedBooks.map((b) => (
               <div
                 key={b.id}
                 className="rounded-lg border border-slate-200 dark:border-slate-800 p-4 bg-white dark:bg-slate-950"
@@ -105,6 +110,8 @@ export default function PersonalBooksPage() {
               </div>
             ))}
           </div>
+
+          <ListPagination page={page} totalPages={totalPages} onPageChange={setPage} />
         </CardContent>
       </Card>
     </div>

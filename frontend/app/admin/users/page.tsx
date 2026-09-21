@@ -7,6 +7,7 @@ import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { validateNINWithMessage } from "dz-nin-checker"
 import { apiFetch } from "@/lib/api"
+import { ListPagination, PAGE_SIZE } from "@/components/list-pagination"
 
 type ApiRole = "admin" | "personnel" | "etudiant" | "membre_public"
 
@@ -88,6 +89,7 @@ async function parseErrorMessage(res: Response): Promise<string> {
 
 export default function AdminUsersPage() {
   const [searchQuery, setSearchQuery] = useState("")
+  const [page, setPage] = useState(1)
   const [loadingUsers, setLoadingUsers] = useState(true)
   const [usersError, setUsersError] = useState("")
   const [users, setUsers] = useState<ApiUser[]>([])
@@ -254,6 +256,13 @@ export default function AdminUsersPage() {
     return name.includes(q) || email.includes(q)
   })
 
+  useEffect(() => {
+    setPage(1)
+  }, [searchQuery])
+
+  const totalPages = Math.max(1, Math.ceil(filteredUsers.length / PAGE_SIZE))
+  const paginatedUsers = filteredUsers.slice((page - 1) * PAGE_SIZE, page * PAGE_SIZE)
+
   return (
     <div className="p-6 space-y-6">
       <Card className="border-0 shadow-sm">
@@ -372,7 +381,7 @@ export default function AdminUsersPage() {
                       </td>
                     </tr>
                   ) : (
-                    filteredUsers.map((u) => (
+                    paginatedUsers.map((u) => (
                       <tr key={u.id} className="border-b border-slate-200 dark:border-slate-800 hover:bg-slate-50 dark:hover:bg-slate-900">
                         <td className="py-3 px-4 font-medium">{u.prenom} {u.nom}</td>
                         <td className="py-3 px-4 text-slate-600 dark:text-slate-400">{u.email}</td>
@@ -409,6 +418,8 @@ export default function AdminUsersPage() {
               </table>
             </div>
           </div>
+
+          <ListPagination page={page} totalPages={totalPages} onPageChange={setPage} />
         </CardContent>
       </Card>
     </div>

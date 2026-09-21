@@ -6,6 +6,7 @@ import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { apiFetch } from "@/lib/api"
+import { ListPagination, PAGE_SIZE } from "@/components/list-pagination"
 
 type Category = { id: number; name: string }
 
@@ -64,6 +65,9 @@ export default function AdminCataloguePage() {
   const [filterIsbn, setFilterIsbn] = useState("")
   const [filterAuthor, setFilterAuthor] = useState("")
   const [filterEditor, setFilterEditor] = useState("")
+
+  const [categoryPage, setCategoryPage] = useState(1)
+  const [bookPage, setBookPage] = useState(1)
 
   const loadAll = async () => {
     setLoading(true)
@@ -177,6 +181,20 @@ export default function AdminCataloguePage() {
     return categories.filter((c) => (c.name || "").toLowerCase().includes(q))
   }, [categories, categorySearch])
 
+  useEffect(() => {
+    setBookPage(1)
+  }, [filterAuthor, filterCategoryId, filterEditor, filterIsbn, filterLang])
+
+  useEffect(() => {
+    setCategoryPage(1)
+  }, [categorySearch])
+
+  const bookTotalPages = Math.max(1, Math.ceil(filteredBooks.length / PAGE_SIZE))
+  const paginatedBooks = filteredBooks.slice((bookPage - 1) * PAGE_SIZE, bookPage * PAGE_SIZE)
+
+  const categoryTotalPages = Math.max(1, Math.ceil(filteredCategories.length / PAGE_SIZE))
+  const paginatedCategories = filteredCategories.slice((categoryPage - 1) * PAGE_SIZE, categoryPage * PAGE_SIZE)
+
   return (
     <div className="p-6 space-y-6">
       <Card className="border-0 shadow-sm">
@@ -232,7 +250,7 @@ export default function AdminCataloguePage() {
                         <td colSpan={3} className="py-6 px-4 text-slate-500">Loading...</td>
                       </tr>
                     ) : (
-                      filteredCategories.map((c) => (
+                      paginatedCategories.map((c) => (
                         <tr key={c.id} className="border-b border-slate-200 dark:border-slate-800">
                           <td className="py-3 px-4">{c.id}</td>
                           <td className="py-3 px-4 font-medium">{c.name}</td>
@@ -252,6 +270,8 @@ export default function AdminCataloguePage() {
                   </tbody>
                 </table>
               </div>
+
+              <ListPagination page={categoryPage} totalPages={categoryTotalPages} onPageChange={setCategoryPage} />
             </div>
           )}
 
@@ -315,7 +335,7 @@ export default function AdminCataloguePage() {
                           <td colSpan={7} className="py-6 px-4 text-slate-500">Loading...</td>
                         </tr>
                       ) : (
-                        filteredBooks.map((b) => (
+                        paginatedBooks.map((b) => (
                           <tr key={b.id} className="border-b border-slate-200 dark:border-slate-800 hover:bg-slate-50 dark:hover:bg-slate-900">
                             <td className="py-3 px-4 font-medium">{b.titre}</td>
                             <td className="py-3 px-4">{b.isbn}</td>
@@ -345,6 +365,8 @@ export default function AdminCataloguePage() {
                   </table>
                 </div>
               </div>
+
+              <ListPagination page={bookPage} totalPages={bookTotalPages} onPageChange={setBookPage} />
             </div>
           )}
         </CardContent>

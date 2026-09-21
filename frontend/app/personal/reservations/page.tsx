@@ -5,6 +5,7 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
 import { Heart, CheckCircle, Clock, AlertCircle } from "lucide-react"
 import { apiFetch } from "@/lib/api"
+import { ListPagination, PAGE_SIZE } from "@/components/list-pagination"
 
 export default function ReservationsPage() {
   const [loading, setLoading] = useState(false)
@@ -12,6 +13,7 @@ export default function ReservationsPage() {
   const [reservations, setReservations] = useState<any[]>([])
   const [usersById, setUsersById] = useState<Map<number, any>>(new Map())
   const [actingId, setActingId] = useState<number | null>(null)
+  const [page, setPage] = useState(1)
 
   const load = async () => {
     setLoading(true)
@@ -99,6 +101,9 @@ export default function ReservationsPage() {
     }
   }
 
+  const totalPages = Math.max(1, Math.ceil(reservations.length / PAGE_SIZE))
+  const paginatedReservations = reservations.slice((page - 1) * PAGE_SIZE, page * PAGE_SIZE)
+
   const checkoutReservation = async (id: number) => {
     try {
       setActingId(id)
@@ -168,7 +173,7 @@ export default function ReservationsPage() {
           </Card>
         ) : null}
 
-        {reservations.map((reservation) => {
+        {paginatedReservations.map((reservation) => {
           const uiStatus = toUiStatus(reservation.statut)
           const user = usersById.get(reservation.userId)
           const reservedBy = user ? `${user.prenom} ${user.nom}` : `User #${reservation.userId}`
@@ -272,6 +277,8 @@ export default function ReservationsPage() {
           </Card>
         )})}
       </div>
+
+      <ListPagination page={page} totalPages={totalPages} onPageChange={setPage} />
     </div>
   )
 }

@@ -8,6 +8,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Card, CardContent } from "@/components/ui/card"
 import { Badge } from "@/components/ui/badge"
 import { apiBorrow, apiCancelReservation, apiMe, apiMyBorrowed, apiMyReservations, apiReserve } from "@/lib/student"
+import { ListPagination, PAGE_SIZE } from "@/components/list-pagination"
 
 type ApiCategory = { id: number; name: string }
 type ApiEditor = { id: number; name: string }
@@ -76,6 +77,7 @@ export default function DiscoverPage() {
   const [language, setLanguage] = useState("all")
   const [author, setAuthor] = useState("all")
   const [isbn, setIsbn] = useState("")
+  const [page, setPage] = useState(1)
 
   const [books, setBooks] = useState<UiBook[]>([])
   const [loading, setLoading] = useState(false)
@@ -189,6 +191,13 @@ export default function DiscoverPage() {
       return matchesSearch && matchesCategory && matchesLanguage && matchesAuthor && matchesIsbn
     })
   }, [author, books, category, isbn, language, searchQuery])
+
+  useEffect(() => {
+    setPage(1)
+  }, [author, category, isbn, language, searchQuery])
+
+  const totalPages = Math.max(1, Math.ceil(filteredBooks.length / PAGE_SIZE))
+  const paginatedBooks = filteredBooks.slice((page - 1) * PAGE_SIZE, page * PAGE_SIZE)
 
   const toggleFavorite = (id: number) => {
     setFavorites((prev) => (prev.includes(id) ? prev.filter((fav) => fav !== id) : [...prev, id]))
@@ -391,7 +400,7 @@ export default function DiscoverPage() {
 
       {/* Books Grid */}
       <div className="grid md:grid-cols-3 lg:grid-cols-4 gap-6">
-        {filteredBooks.map((book) => (
+        {paginatedBooks.map((book) => (
           <div key={book.id} className="group cursor-pointer">
             <div
               className="relative mb-4 rounded-lg overflow-hidden aspect-[3/4] bg-slate-200 dark:bg-slate-800 shadow-md hover:shadow-lg transition-shadow"
@@ -490,6 +499,8 @@ export default function DiscoverPage() {
           </div>
         ))}
       </div>
+
+      <ListPagination page={page} totalPages={totalPages} onPageChange={setPage} />
 
       {/* Book Details Modal */}
       {selectedBook && (
