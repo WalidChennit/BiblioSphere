@@ -117,6 +117,18 @@ Frontend runs at: `http://localhost:3000`
 
 ---
 
+## Test Accounts
+
+Seeded on the production database for demo/testing purposes:
+
+| Role       | Email                        | Password    |
+| ---------- | ---------------------------- | ----------- |
+| Admin      | `admin@bibliosphere.test`     | `Test1234!` |
+| Personnel  | `personnel@bibliosphere.test` | `Test1234!` |
+| Étudiant   | `etudiant@bibliosphere.test`  | `Test1234!` |
+
+---
+
 ## Key API Endpoints
 
 ### Auth
