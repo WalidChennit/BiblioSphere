@@ -11,11 +11,14 @@ async function bootstrap() {
 
   app.use(cookieParser());
 
+  const allowedOrigins = [
+    'http://localhost:3000',
+    'http://127.0.0.1:3000',
+    ...(process.env.FRONTEND_URL ? [process.env.FRONTEND_URL] : []),
+  ];
+
   app.enableCors({
-    origin: [
-      'http://localhost:3000',
-      'http://127.0.0.1:3000',
-    ],
+    origin: allowedOrigins,
     credentials: true,
   });
 
@@ -36,8 +39,9 @@ async function bootstrap() {
   const document = SwaggerModule.createDocument(app, config);
   SwaggerModule.setup('api', app, document);
 
-  // Démarrage serveur en IPv4 (évite conflit avec Next.js sur 3000)
-  await app.listen(3001, '127.0.0.1');
+  const port = process.env.PORT ? Number(process.env.PORT) : 3001;
+  const host = process.env.NODE_ENV === 'production' ? '0.0.0.0' : '127.0.0.1';
+  await app.listen(port, host);
 
   const url = await app.getUrl();
   console.log(`\n🚀 Application: ${url}`);
