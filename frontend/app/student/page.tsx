@@ -57,7 +57,7 @@ export default function StudentDashboard() {
       }
 
       try {
-        const resUsers = await fetch(`${process.env.NEXT_PUBLIC_API_BASE_URL || "http://localhost:3001"}/users`, {
+        const resUsers = await fetch(`/api/users`, {
           credentials: "include",
           cache: "no-store",
         })

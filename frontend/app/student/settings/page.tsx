@@ -86,7 +86,7 @@ export default function StudentSettingsPage() {
         }
 
         // Fetch full profile using the existing users listing (no dedicated endpoint yet)
-        const res = await fetch(`${process.env.NEXT_PUBLIC_API_BASE_URL || "http://localhost:3001"}/users`, {
+        const res = await fetch(`/api/users`, {
           credentials: "include",
           cache: "no-store",
         })

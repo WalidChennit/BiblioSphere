@@ -24,7 +24,7 @@ type Reservation = {
   queuePosition?: number | null
 }
 
-const API_BASE = process.env.NEXT_PUBLIC_API_BASE_URL || "http://127.0.0.1:3001"
+const API_BASE = "/api"
 
 export default function ReservationsPage() {
   const [meUserId, setMeUserId] = useState<number | null>(null)

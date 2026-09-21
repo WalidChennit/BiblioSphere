@@ -14,7 +14,7 @@ import { BookOpen } from "lucide-react"
 import { useRouter } from "next/navigation"
 import { validateNINWithMessage } from "dz-nin-checker"
 
-const API_BASE = process.env.NEXT_PUBLIC_API_BASE_URL || "http://127.0.0.1:3001"
+const API_BASE = "/api"
 
 function passwordStrength(password: string): { score: number; label: string; color: string } {
   const p = password
